@@ -36,24 +36,20 @@ export interface ChallengeState {
   id: string;
   domain: MathDomain;
   question: string;
-  correctAnswer: string;
+  // NOTE: correctAnswer is NEVER sent from server — it stays server-side only
   rewardEnergy: number;
   expiresAtTurn: number;
 }
 
-export enum EffectType {
-  Scout = 'Scout',
-  Airstrike = 'Airstrike',
-}
-
-export interface CommanderEffect {
-  id: string;
-  type: EffectType;
-  player: UserData;
-  center: Position;
-  expiresAtTurn: number;
-  radius: number;
-}
+// Authoritative ability costs — must match server ABILITY_COSTS
+export const ABILITY_COSTS: Record<AbilityType, number> = {
+  [AbilityType.Scout]:       20,
+  [AbilityType.Blitz]:       25,
+  [AbilityType.Reinforce]:   30,
+  [AbilityType.Fortify]:     35,
+  [AbilityType.Airstrike]:   60,
+  [AbilityType.SupplySurge]: 80,
+};
 // ==========================================
 
 export interface initGameInfo {

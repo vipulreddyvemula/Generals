@@ -1,135 +1,104 @@
 import { MathDomain, ChallengeState } from '../types';
 import crypto from 'crypto';
 
+// ============================================================
+// ENERGY REWARDS (authoritative — must match client constants)
+// ============================================================
+export const ENERGY_REWARD_EASY   = 10;
+export const ENERGY_REWARD_MEDIUM = 20;
+export const ENERGY_REWARD_HARD   = 35;
+
+// Challenge expires after this many game turns (≈30 s at 1 turn/s)
+const CHALLENGE_EXPIRE_TURNS = 60;
+
+// ============================================================
+// HARD-CODED PROBLEM POOL
+// Each entry: domain, question, answer (lowercase, trimmed),
+// difficulty, rewardEnergy
+// ============================================================
+interface Problem {
+  domain: MathDomain;
+  question: string;
+  answer: string;        // canonical correct answer (lowercase, trimmed)
+  rewardEnergy: number;
+}
+
+const PROBLEM_POOL: Problem[] = [
+  // ------ Arithmetic — Easy ------
+  { domain: MathDomain.Arithmetic,   question: 'What is 37 × 4?',                                    answer: '148',   rewardEnergy: ENERGY_REWARD_EASY },
+  { domain: MathDomain.Arithmetic,   question: 'What is 144 ÷ 12?',                                  answer: '12',    rewardEnergy: ENERGY_REWARD_EASY },
+  { domain: MathDomain.Arithmetic,   question: 'What is 256 − 89?',                                  answer: '167',   rewardEnergy: ENERGY_REWARD_EASY },
+  { domain: MathDomain.Arithmetic,   question: 'What is 48 × 5?',                                    answer: '240',   rewardEnergy: ENERGY_REWARD_EASY },
+  { domain: MathDomain.Arithmetic,   question: '15% of 240 = ?',                                     answer: '36',    rewardEnergy: ENERGY_REWARD_EASY },
+  { domain: MathDomain.Arithmetic,   question: 'What is 17 + 58 + 25?',                              answer: '100',   rewardEnergy: ENERGY_REWARD_EASY },
+  { domain: MathDomain.Arithmetic,   question: 'What is 360 ÷ 8?',                                   answer: '45',    rewardEnergy: ENERGY_REWARD_EASY },
+
+  // ------ Arithmetic — Medium ------
+  { domain: MathDomain.Arithmetic,   question: 'What is 37 × 84?',                                   answer: '3108',  rewardEnergy: ENERGY_REWARD_MEDIUM },
+  { domain: MathDomain.Arithmetic,   question: 'What is 25% of 480?',                                answer: '120',   rewardEnergy: ENERGY_REWARD_MEDIUM },
+  { domain: MathDomain.Arithmetic,   question: 'What is 512 ÷ 16?',                                  answer: '32',    rewardEnergy: ENERGY_REWARD_MEDIUM },
+  { domain: MathDomain.Arithmetic,   question: 'What is 13³ (13 cubed)?',                            answer: '2197',  rewardEnergy: ENERGY_REWARD_MEDIUM },
+
+  // ------ Algebra ------
+  { domain: MathDomain.Algebra,      question: 'Solve for x: 3x + 7 = 31',                          answer: '8',     rewardEnergy: ENERGY_REWARD_MEDIUM },
+  { domain: MathDomain.Algebra,      question: 'Solve for x: 5x − 15 = 35',                         answer: '10',    rewardEnergy: ENERGY_REWARD_MEDIUM },
+  { domain: MathDomain.Algebra,      question: 'Solve for x: 2x + 9 = 41',                          answer: '16',    rewardEnergy: ENERGY_REWARD_MEDIUM },
+  { domain: MathDomain.Algebra,      question: 'Solve for x: 7x = 56',                              answer: '8',     rewardEnergy: ENERGY_REWARD_EASY   },
+  { domain: MathDomain.Algebra,      question: 'Solve for x: 4x − 3 = 17',                          answer: '5',     rewardEnergy: ENERGY_REWARD_EASY   },
+  { domain: MathDomain.Algebra,      question: 'If f(x) = 3x² − 2, find f(4)',                      answer: '46',    rewardEnergy: ENERGY_REWARD_HARD   },
+
+  // ------ Sequences ------
+  { domain: MathDomain.Sequence,     question: 'Next in sequence: 4, 9, 14, 19, ?',                  answer: '24',    rewardEnergy: ENERGY_REWARD_EASY   },
+  { domain: MathDomain.Sequence,     question: 'Next in sequence: 2, 4, 8, 16, ?',                   answer: '32',    rewardEnergy: ENERGY_REWARD_EASY   },
+  { domain: MathDomain.Sequence,     question: 'Next in sequence: 1, 4, 9, 16, 25, ?',               answer: '36',    rewardEnergy: ENERGY_REWARD_EASY   },
+  { domain: MathDomain.Sequence,     question: 'Next in sequence: 3, 7, 13, 21, 31, ?',              answer: '43',    rewardEnergy: ENERGY_REWARD_MEDIUM },
+  { domain: MathDomain.Sequence,     question: 'Next in sequence: 1, 1, 2, 3, 5, 8, ?',              answer: '13',    rewardEnergy: ENERGY_REWARD_MEDIUM },
+
+  // ------ Geometry ------
+  { domain: MathDomain.Geometry,     question: 'Area of a rectangle: width 8, height 13?',           answer: '104',   rewardEnergy: ENERGY_REWARD_EASY   },
+  { domain: MathDomain.Geometry,     question: 'Perimeter of a rectangle: width 9, height 6?',       answer: '30',    rewardEnergy: ENERGY_REWARD_EASY   },
+  { domain: MathDomain.Geometry,     question: 'Area of a triangle: base 10, height 7?',             answer: '35',    rewardEnergy: ENERGY_REWARD_EASY   },
+  { domain: MathDomain.Geometry,     question: 'How many degrees are in a triangle?',                answer: '180',   rewardEnergy: ENERGY_REWARD_EASY   },
+  { domain: MathDomain.Geometry,     question: 'Area of a circle with radius 7? (use π = 22/7)',     answer: '154',   rewardEnergy: ENERGY_REWARD_MEDIUM },
+
+  // ------ Probability & Logic ------
+  { domain: MathDomain.Probability,  question: 'A bag has 3 red and 7 blue balls. P(red) as %?',     answer: '30',    rewardEnergy: ENERGY_REWARD_MEDIUM },
+  { domain: MathDomain.Logic,        question: 'If all A are B, and X is A, is X a B? (yes/no)',     answer: 'yes',   rewardEnergy: ENERGY_REWARD_EASY   },
+  { domain: MathDomain.Logic,        question: 'NOT (TRUE AND FALSE) = ?  (true/false)',             answer: 'true',  rewardEnergy: ENERGY_REWARD_EASY   },
+];
+
+// ============================================================
+// Normalize answer: trim whitespace, lowercase, remove commas
+// ============================================================
+function normalize(s: string): string {
+  return s.toLowerCase().replace(/,/g, '').trim();
+}
+
+// ============================================================
+// MathGenerator — server-authoritative
+// ============================================================
 export class MathGenerator {
-  public static generate(domain?: MathDomain): Omit<ChallengeState, 'id' | 'expiresAtTurn'> {
-    const selectedDomain = domain || this.getRandomDomain();
-    
-    let question = '';
-    let correctAnswer = '';
-    let rewardEnergy = 10;
-
-    switch (selectedDomain) {
-      case MathDomain.Arithmetic:
-        const { q: aq, a: aa } = this.generateArithmetic();
-        question = aq; correctAnswer = aa; rewardEnergy = 10;
-        break;
-      case MathDomain.Algebra:
-        const { q: alq, a: ala } = this.generateAlgebra();
-        question = alq; correctAnswer = ala; rewardEnergy = 20;
-        break;
-      case MathDomain.Sequence:
-        const { q: sq, a: sa } = this.generateSequence();
-        question = sq; correctAnswer = sa; rewardEnergy = 15;
-        break;
-      case MathDomain.Geometry:
-        const { q: gq, a: ga } = this.generateGeometry();
-        question = gq; correctAnswer = ga; rewardEnergy = 15;
-        break;
-      case MathDomain.Probability:
-        const { q: pq, a: pa } = this.generateProbability();
-        question = pq; correctAnswer = pa; rewardEnergy = 20;
-        break;
-      case MathDomain.Logic:
-        const { q: lq, a: la } = this.generateLogic();
-        question = lq; correctAnswer = la; rewardEnergy = 10;
-        break;
-    }
-
+  /**
+   * Generate a challenge. Server picks randomly.
+   * @param currentTurn Current game turn (used to compute expiry).
+   */
+  public static generateChallenge(currentTurn: number): ChallengeState {
+    const problem = PROBLEM_POOL[Math.floor(Math.random() * PROBLEM_POOL.length)];
     return {
-      domain: selectedDomain,
-      question,
-      correctAnswer: correctAnswer.toLowerCase().trim(),
-      rewardEnergy
-    };
-  }
-
-  public static generateWithIdAndExpiry(turn: number, domain?: MathDomain): ChallengeState {
-    const base = this.generate(domain);
-    return {
-      ...base,
       id: crypto.randomUUID(),
-      expiresAtTurn: turn + 10 // e.g. expires in 10 seconds if tick is 1s
+      domain: problem.domain,
+      question: problem.question,
+      correctAnswer: problem.answer,
+      rewardEnergy: problem.rewardEnergy,
+      expiresAtTurn: currentTurn + CHALLENGE_EXPIRE_TURNS,
     };
   }
 
-  private static getRandomDomain(): MathDomain {
-    const domains = Object.values(MathDomain);
-    return domains[Math.floor(Math.random() * domains.length)] as MathDomain;
-  }
-
-  private static generateArithmetic() {
-    const a = Math.floor(Math.random() * 50) + 1;
-    const b = Math.floor(Math.random() * 50) + 1;
-    const ops = ['+', '-', '*'];
-    const op = ops[Math.floor(Math.random() * ops.length)];
-    let ans = 0;
-    if (op === '+') ans = a + b;
-    if (op === '-') ans = a - b;
-    if (op === '*') ans = a * (Math.floor(Math.random() * 10) + 1); // Keep multiplication smaller
-    
-    if (op === '*') {
-      const b_small = Math.floor(Math.random() * 10) + 1;
-      return { q: `${a} * ${b_small} = ?`, a: (a * b_small).toString() };
-    }
-    return { q: `${a} ${op} ${b} = ?`, a: ans.toString() };
-  }
-
-  private static generateAlgebra() {
-    // ax + b = c  => x = (c-b)/a
-    const a = Math.floor(Math.random() * 9) + 2; // 2 to 10
-    const x = Math.floor(Math.random() * 20) + 1; // 1 to 20
-    const b = Math.floor(Math.random() * 20) + 1;
-    const c = a * x + b;
-    return { q: `Solve for x: ${a}x + ${b} = ${c}`, a: x.toString() };
-  }
-
-  private static generateSequence() {
-    // Arithmetic or geometric progression
-    const isArithmetic = Math.random() > 0.5;
-    const start = Math.floor(Math.random() * 10) + 1;
-    
-    if (isArithmetic) {
-      const diff = Math.floor(Math.random() * 10) + 1;
-      return {
-        q: `Next in sequence: ${start}, ${start+diff}, ${start+2*diff}, ${start+3*diff}, ?`,
-        a: (start + 4*diff).toString()
-      };
-    } else {
-      const ratio = Math.floor(Math.random() * 3) + 2; // 2 to 4
-      return {
-        q: `Next in sequence: ${start}, ${start*ratio}, ${start*ratio*ratio}, ?`,
-        a: (start*ratio*ratio*ratio).toString()
-      };
-    }
-  }
-
-  private static generateGeometry() {
-    const isArea = Math.random() > 0.5;
-    const w = Math.floor(Math.random() * 10) + 2;
-    const h = Math.floor(Math.random() * 10) + 2;
-    if (isArea) {
-      return { q: `Area of a rectangle with width ${w} and height ${h}?`, a: (w*h).toString() };
-    } else {
-      return { q: `Perimeter of a rectangle with width ${w} and height ${h}?`, a: (2*w + 2*h).toString() };
-    }
-  }
-
-  private static generateProbability() {
-    return {
-      q: `Probability of flipping a coin and getting Heads? (Format as fraction, e.g. 1/2)`,
-      a: '1/2'
-    };
-  }
-
-  private static generateLogic() {
-    const a = Math.random() > 0.5;
-    const b = Math.random() > 0.5;
-    const isAnd = Math.random() > 0.5;
-    const ans = isAnd ? (a && b) : (a || b);
-    return {
-      q: `If A is ${a} and B is ${b}, what is A ${isAnd ? 'AND' : 'OR'} B?`,
-      a: ans.toString()
-    };
+  /**
+   * Verify player's submitted answer against the challenge.
+   * Returns true if correct.
+   */
+  public static verifyAnswer(challenge: ChallengeState, submitted: string): boolean {
+    return normalize(challenge.correctAnswer) === normalize(submitted);
   }
 }

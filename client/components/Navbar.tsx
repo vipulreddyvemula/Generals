@@ -3,232 +3,137 @@ import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import Menu from '@mui/material/Menu';
-import Chip from '@mui/material/Chip';
 import MenuIcon from '@mui/icons-material/Menu';
 import Container from '@mui/material/Container';
 import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
-import Select from '@mui/material/Select';
 
 import { useState } from 'react';
-
-import { useTranslation } from 'next-i18next';
 import { useRouter } from 'next/router';
-import Image from 'next/image';
+import Link from 'next/link';
+import { HomeRounded, GitHub } from '@mui/icons-material';
 import HowToPlay from './HowToPlay';
 
-import AccountCircleIcon from '@mui/icons-material/AccountCircle';
-import Link from 'next/link';
-import {
-  BookRounded,
-  FeedbackRounded,
-  Contacts,
-  GitHub,
-  HomeRounded,
-  SmartToyRounded,
-} from '@mui/icons-material';
-
 const navItems = [
-  { href: '/', label: 'home', icon: <HomeRounded /> },
-  { href: 'https://docs.gennia.online/', label: 'wiki', icon: <BookRounded /> },
-  {
-    href: 'https://github.com/GenniaApp/GenniaServer2',
-    label: 'github',
-    icon: <GitHub />,
-  },
-  {
-    href: 'https://github.com/GenniaApp/GenniaBot',
-    label: 'bot-api',
-    icon: <SmartToyRounded />,
-  },
-  {
-    href: 'https://github.com/GenniaApp/GenniaServer2/issues',
-    label: 'feedback',
-    icon: <FeedbackRounded />,
-  },
-  {
-    href: 'http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=VAwNA8NiYUMsPHrBxLso-t09saGZCT14&authKey=fFpto%2Ff%2FhNUpcxZhSVZt6msLOZrMhW3e14mypEBlO3Ih7PdqOmXq%2FQ0OlV3D%2BuyO&noverify=0&group_code=374889821',
-    label: 'qq-group',
-    icon: <Contacts />,
-  },
+  { href: '/', label: 'Home', icon: <HomeRounded /> },
+  { href: 'https://github.com/vipulreddyvemula/Generals', label: 'GitHub', icon: <GitHub /> },
 ];
 
 function Navbar() {
   const [anchorElNav, setAnchorElNav] = useState(null);
-
   const [show, setShow] = useState(false);
-
-  const toggleShow = () => {
-    setShow(!show);
-  };
-
   const router = useRouter();
 
-  const handleClick = (lang: string) => async () => {
-    router.push(router.asPath, undefined, { locale: lang });
-  };
-
-  const handleOpenNavMenu = (event: any) => {
-    setAnchorElNav(event.currentTarget);
-  };
-
-  const handleCloseNavMenu = () => {
-    setAnchorElNav(null);
-  };
-
-  const { t } = useTranslation();
+  const handleOpenNavMenu = (event: any) => setAnchorElNav(event.currentTarget);
+  const handleCloseNavMenu = () => setAnchorElNav(null);
+  const toggleShow = () => setShow(!show);
 
   return (
-    <AppBar position='fixed' className='navbar'>
-      <Container className='dock' sx={{ boxShadow: 3 }}>
+    <AppBar
+      position="fixed"
+      className="navbar"
+      sx={{
+        background: 'linear-gradient(90deg, rgba(5,10,25,0.97) 0%, rgba(10,20,50,0.97) 100%)',
+        borderBottom: '1px solid rgba(0,212,255,0.15)',
+        backdropFilter: 'blur(10px)',
+        boxShadow: 'none',
+      }}
+    >
+      <Container className="dock" sx={{ boxShadow: 0 }}>
+        {/* Mobile */}
         <Box sx={{ flexGrow: 1, display: { xs: 'flex', md: 'none' } }}>
-          <IconButton
-            size='large'
-            aria-label='account of current user'
-            aria-controls='menu-appbar'
-            aria-haspopup='true'
-            onClick={handleOpenNavMenu}
-            color='inherit'
-          >
+          <IconButton size="large" onClick={handleOpenNavMenu} color="inherit">
             <MenuIcon />
           </IconButton>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Link
-              href='/'
-              style={{ display: 'flex', alignItems: 'center', flexGrow: 0 }}
+            <Typography
+              sx={{
+                fontWeight: 800,
+                letterSpacing: 3,
+                fontSize: '1rem',
+                background: 'linear-gradient(90deg, #00d4ff, #7a00ff)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
             >
-              <Image
-                src='/img/gennia-logo.png'
-                width={100}
-                height={17.3}
-                alt='Gennia logo'
-              />
-            </Link>
+              COMMANDER MODE
+            </Typography>
           </Box>
           <Menu
-            id='menu-appbar'
+            id="menu-appbar"
             anchorEl={anchorElNav}
-            anchorOrigin={{
-              vertical: 'bottom',
-              horizontal: 'left',
-            }}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
             keepMounted
-            transformOrigin={{
-              vertical: 'top',
-              horizontal: 'left',
-            }}
+            transformOrigin={{ vertical: 'top', horizontal: 'left' }}
             open={Boolean(anchorElNav)}
             onClose={handleCloseNavMenu}
-            sx={{
-              display: { xs: 'block', md: 'none' },
-            }}
+            sx={{ display: { xs: 'block', md: 'none' } }}
           >
-            {navItems.map((item) => (
+            {navItems.map(item => (
               <MenuItem key={item.href} onClick={handleCloseNavMenu}>
                 <Link href={item.href}>
-                  <Typography textAlign='center'>{t(item.label)}</Typography>
+                  <Typography textAlign="center">{item.label}</Typography>
                 </Link>
               </MenuItem>
             ))}
           </Menu>
         </Box>
 
-        <Box
-          sx={{
-            flexGrow: 1,
-            justifyContent: 'space-between',
-            display: { xs: 'none', md: 'flex' },
-            alignItems: 'center',
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Link
-              href='/'
-              style={{ display: 'flex', alignItems: 'center', flexGrow: 0 }}
+        {/* Desktop */}
+        <Box sx={{ flexGrow: 1, justifyContent: 'space-between', display: { xs: 'none', md: 'flex' }, alignItems: 'center' }}>
+          {/* Brand */}
+          <Link href="/" style={{ textDecoration: 'none' }}>
+            <Typography
+              sx={{
+                fontWeight: 800,
+                letterSpacing: 4,
+                fontSize: '1.1rem',
+                background: 'linear-gradient(90deg, #00d4ff, #7a00ff)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                cursor: 'pointer',
+              }}
             >
-              <Image
-                src='/img/gennia-logo.png'
-                width={100}
-                height={17.3}
-                alt='Gennia logo'
-              />
-            </Link>
-          </Box>
+              ⚔ COMMANDER MODE
+            </Typography>
+          </Link>
+
+          {/* Nav links */}
           <Box>
-            {navItems.map((item) => (
+            {navItems.map(item => (
               <Link href={item.href} key={item.href}>
                 <Button
-                  id='navbar-link'
                   onClick={handleCloseNavMenu}
-                  sx={{
-                    textTransform: 'none',
-                    fontSize: '1rem',
-                    marginX: '10px',
-                  }}
+                  sx={{ textTransform: 'none', fontSize: '0.9rem', marginX: '6px', color: 'rgba(255,255,255,0.8)' }}
                   startIcon={item.icon}
                 >
-                  {t(item.label)}
+                  {item.label}
                 </Button>
               </Link>
             ))}
           </Box>
-          <Box
-            id='lng-selector'
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              flexDirection: 'row',
-            }}
-          >
+
+          {/* How to play */}
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <Button
-              variant='contained'
-              size='small'
+              variant="outlined"
+              size="small"
               onClick={toggleShow}
-              sx={{ margin: 2, height: '40px', fontSize: '15px' }}
+              sx={{
+                borderColor: 'rgba(0,212,255,0.4)',
+                color: '#00d4ff',
+                fontSize: '0.8rem',
+                '&:hover': { borderColor: '#00d4ff', background: 'rgba(0,212,255,0.08)' }
+              }}
             >
-              <Typography variant='body2' sx={{ whiteSpace: 'nowrap' }}>
-                {t('how-to-play')}
-              </Typography>
+              How to Play
             </Button>
             <HowToPlay show={show} toggleShow={toggleShow} />
-            <FormControl>
-              <Select
-                color='primary'
-                className='navbar-language-switch'
-                defaultValue={router.locale ?? 'en'}
-              >
-                {router.locales &&
-                  router.locales.map((lang) => (
-                    <MenuItem
-                      key={lang}
-                      value={lang}
-                      onClick={handleClick(lang)}
-                    >
-                      <Typography>{lang}</Typography>
-                    </MenuItem>
-                  ))}
-              </Select>
-            </FormControl>
           </Box>
         </Box>
-
-        {/* 用户界面 todo */}
-        {/* <Box sx={{ flexGrow: 0 }}>
-            <Button
-              id="navbar-link"
-              variant="text"
-              color="primary"
-              sx={{ color: "white" }}
-              onClick={handleOpen}
-            >
-              {" "}
-              {t("navbar-link-clientzone")}{" "}
-              <AccountCircleIcon sx={{ ml: 0.4 }} />
-            </Button>
-          </Box> */}
       </Container>
     </AppBar>
   );
 }
+
 export default Navbar;

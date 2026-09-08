@@ -33,7 +33,7 @@ export default function Home() {
     <StrictMode>
       <ThemeProvider theme={theme}>
         <Head>
-          <title>Home | Gennia</title>
+          <title>Commander Mode — Solve. Command. Conquer.</title>
         </Head>
         <Navbar />
         {!username && (

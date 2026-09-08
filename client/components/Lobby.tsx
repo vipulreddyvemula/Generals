@@ -125,14 +125,19 @@ function Lobby() {
             }}
           >
             <Typography
-              variant='h4'
+              variant='h5'
               component='h1'
-              color='primary'
-              fontWeight='bold'
-              gutterBottom
-              sx={{ padding: '20px' }}
+              sx={{
+                padding: '20px',
+                fontWeight: 800,
+                letterSpacing: 3,
+                background: 'linear-gradient(90deg, #00d4ff, #7a00ff)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                textTransform: 'uppercase',
+              }}
             >
-              {t('greet') + username}
+              Welcome, {username}
             </Typography>
             <List className='menu-container' sx={{ width: '100%' }}>
               <ListItem>
@@ -256,12 +261,16 @@ function Lobby() {
                 marginTop: 2,
                 width: '100%',
                 height: '60px',
-                fontSize: '20px',
+                fontSize: '18px',
+                fontWeight: 700,
+                letterSpacing: 2,
                 whiteSpace: 'nowrap',
+                background: 'linear-gradient(45deg, #00d4ff, #0055ff)',
+                '&:hover': { background: 'linear-gradient(45deg, #0055ff, #00d4ff)' },
               }}
               onClick={handleCreateRoomClick}
             >
-              {t('create-room')}
+              ⚔ CREATE BATTLE
             </Button>
             <Button
               variant='contained'

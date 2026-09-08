@@ -1,307 +1,438 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Box, Typography, Button, TextField, LinearProgress, Paper, IconButton, Tooltip, keyframes } from '@mui/material';
+import {
+  Box, Typography, Button, TextField, LinearProgress,
+  Paper, IconButton, Tooltip, keyframes, Chip
+} from '@mui/material';
 import { useGame, useGameDispatch } from '@/context/GameContext';
-import { AbilityType, ChallengeState, MathDomain, UserData } from '@/lib/types';
+import { AbilityType, ChallengeState, ABILITY_COSTS } from '@/lib/types';
 import BoltIcon from '@mui/icons-material/Bolt';
 import SecurityIcon from '@mui/icons-material/Security';
 import SpeedIcon from '@mui/icons-material/Speed';
 import RadarIcon from '@mui/icons-material/Radar';
 import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff';
 import UpgradeIcon from '@mui/icons-material/Upgrade';
+import TimerIcon from '@mui/icons-material/Timer';
 
+// ────────────────────────────────────────────────
 // Animations
+// ────────────────────────────────────────────────
 const pulse = keyframes`
-  0% { box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.7); }
-  70% { box-shadow: 0 0 0 10px rgba(0, 212, 255, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(0, 212, 255, 0); }
+  0%   { box-shadow: 0 0 0 0   rgba(0, 212, 255, 0.7); }
+  70%  { box-shadow: 0 0 0 10px rgba(0, 212, 255, 0); }
+  100% { box-shadow: 0 0 0 0   rgba(0, 212, 255, 0); }
 `;
 
-const float = keyframes`
-  0% { transform: translateY(0px); }
-  50% { transform: translateY(-5px); }
-  100% { transform: translateY(0px); }
+const successFlash = keyframes`
+  0%   { background-color: rgba(76, 175, 80, 0);   }
+  30%  { background-color: rgba(76, 175, 80, 0.35); }
+  100% { background-color: rgba(76, 175, 80, 0);   }
+`;
+
+const shake = keyframes`
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-6px); }
+  40%       { transform: translateX(6px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
 `;
 
 const glow = keyframes`
-  0% { filter: drop-shadow(0 0 5px rgba(0, 255, 255, 0.5)); }
-  50% { filter: drop-shadow(0 0 15px rgba(0, 255, 255, 0.9)); }
-  100% { filter: drop-shadow(0 0 5px rgba(0, 255, 255, 0.5)); }
+  0%   { filter: drop-shadow(0 0 5px  rgba(0, 255, 255, 0.5)); }
+  50%  { filter: drop-shadow(0 0 15px rgba(0, 255, 255, 0.9)); }
+  100% { filter: drop-shadow(0 0 5px  rgba(0, 255, 255, 0.5)); }
 `;
 
+// ────────────────────────────────────────────────
+// Ability definitions (costs from shared constant)
+// ────────────────────────────────────────────────
+const ABILITIES = [
+  { type: AbilityType.Scout,       icon: <RadarIcon />,         color: '#4caf50', target: true },
+  { type: AbilityType.Blitz,       icon: <SpeedIcon />,         color: '#f44336', target: false },
+  { type: AbilityType.Reinforce,   icon: <UpgradeIcon />,       color: '#ff9800', target: true },
+  { type: AbilityType.Fortify,     icon: <SecurityIcon />,      color: '#2196f3', target: true },
+  { type: AbilityType.Airstrike,   icon: <FlightTakeoffIcon />, color: '#9c27b0', target: true },
+  { type: AbilityType.SupplySurge, icon: <BoltIcon />,         color: '#ffeb3b', target: false },
+];
+
+type FeedbackType = 'success' | 'error' | 'info' | 'warning';
+
+interface Feedback {
+  message: string;
+  type: FeedbackType;
+}
+
+// ────────────────────────────────────────────────
 export default function CommanderPanel() {
-  const { room, socketRef, myPlayerId, activeAbility } = useGame();
+  const { socketRef, myPlayerId, activeAbility, room } = useGame();
   const { setActiveAbility } = useGameDispatch();
-  
-  const currentPlayer = useMemo(() => {
-    return room?.players?.find(p => p.id === myPlayerId);
-  }, [room, myPlayerId]);
 
-  const [energy, setEnergy] = useState<number>(0);
-  const [activeChallenge, setActiveChallenge] = useState<ChallengeState | null>(null);
-  const [answerInput, setAnswerInput] = useState<string>('');
-  const [feedback, setFeedback] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
+  const currentPlayer = useMemo(
+    () => room?.players?.find(p => p.id === myPlayerId),
+    [room, myPlayerId]
+  );
 
+  const [energy, setEnergy]                     = useState<number>(0);
+  const [activeChallenge, setActiveChallenge]   = useState<ChallengeState | null>(null);
+  const [answerInput, setAnswerInput]           = useState<string>('');
+  const [feedback, setFeedback]                 = useState<Feedback | null>(null);
+  const [feedbackAnim, setFeedbackAnim]         = useState<'success' | 'error' | null>(null);
+  const [onCooldown, setOnCooldown]             = useState(false);
+
+  // Sync energy from room state (server-authoritative fallback)
   useEffect(() => {
-    if (currentPlayer) {
-      if (currentPlayer.energy !== undefined) setEnergy(currentPlayer.energy);
-      if (currentPlayer.activeChallenge !== undefined) setActiveChallenge(currentPlayer.activeChallenge);
+    if (currentPlayer && currentPlayer.energy !== undefined) {
+      setEnergy(currentPlayer.energy);
     }
   }, [currentPlayer]);
 
+  // Socket event listeners
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket) return;
 
-    socket.on('challenge_issued', (challenge: ChallengeState) => {
+    const onChallengeIssued = (challenge: ChallengeState) => {
       setActiveChallenge(challenge);
-      setFeedback(null);
+      setFeedback({ message: '⚡ Challenge received! Answer quickly!', type: 'info' });
       setAnswerInput('');
-    });
+      setOnCooldown(false);
+    };
 
-    socket.on('challenge_success', (data: { energy: number }) => {
+    const onChallengeSuccess = (data: { energy: number; reward: number }) => {
       setEnergy(data.energy);
       setActiveChallenge(null);
-      setFeedback({ message: 'Correct! Energy boosted.', type: 'success' });
-      setTimeout(() => setFeedback(null), 3000);
-    });
+      setFeedback({ message: `✅ Correct! +${data.reward} Energy`, type: 'success' });
+      setFeedbackAnim('success');
+      setOnCooldown(true);
+      setTimeout(() => { setFeedback(null); setFeedbackAnim(null); }, 3500);
+    };
 
-    socket.on('challenge_failed', (message: string) => {
+    const onChallengeFailed = (message: string) => {
       setActiveChallenge(null);
-      setFeedback({ message, type: 'error' });
-      setTimeout(() => setFeedback(null), 3000);
-    });
+      setFeedback({ message: `❌ ${message}`, type: 'error' });
+      setFeedbackAnim('error');
+      // Show cooldown if it's a game-related failure (not a validation error)
+      if (!message.includes('already have')) setOnCooldown(true);
+      setTimeout(() => { setFeedback(null); setFeedbackAnim(null); }, 4000);
+    };
 
-    socket.on('ability_activated', (data: { abilityType: AbilityType, energy: number }) => {
+    const onAbilityActivated = (data: { abilityType: AbilityType; energy: number }) => {
       setEnergy(data.energy);
-      setFeedback({ message: `${data.abilityType} Activated!`, type: 'success' });
+      setFeedback({ message: `🎯 ${data.abilityType} activated!`, type: 'success' });
       setActiveAbility(null);
       setTimeout(() => setFeedback(null), 3000);
-    });
+    };
 
-    socket.on('ability_failed', (message: string) => {
-      setFeedback({ message, type: 'error' });
+    const onAbilityFailed = (message: string) => {
+      setFeedback({ message: `⚠️ ${message}`, type: 'warning' });
+      setActiveAbility(null);
       setTimeout(() => setFeedback(null), 3000);
-    });
+    };
+
+    socket.on('challenge_issued',   onChallengeIssued);
+    socket.on('challenge_success',  onChallengeSuccess);
+    socket.on('challenge_failed',   onChallengeFailed);
+    socket.on('ability_activated',  onAbilityActivated);
+    socket.on('ability_failed',     onAbilityFailed);
 
     return () => {
-      socket.off('challenge_issued');
-      socket.off('challenge_success');
-      socket.off('challenge_failed');
-      socket.off('ability_activated');
-      socket.off('ability_failed');
+      socket.off('challenge_issued',   onChallengeIssued);
+      socket.off('challenge_success',  onChallengeSuccess);
+      socket.off('challenge_failed',   onChallengeFailed);
+      socket.off('ability_activated',  onAbilityActivated);
+      socket.off('ability_failed',     onAbilityFailed);
     };
   }, [socketRef, setActiveAbility]);
 
   const requestChallenge = () => {
-    const domains = [MathDomain.Arithmetic, MathDomain.Algebra, MathDomain.Sequence, MathDomain.Logic];
-    const randomDomain = domains[Math.floor(Math.random() * domains.length)];
-    socketRef.current.emit('request_challenge', randomDomain);
+    if (!socketRef.current) return;
+    // No domain argument — server picks randomly (fixes bug: server ignored the arg anyway)
+    socketRef.current.emit('request_challenge');
   };
 
   const submitChallenge = (e: React.FormEvent) => {
     e.preventDefault();
-    if (activeChallenge && answerInput.trim()) {
+    if (activeChallenge && answerInput.trim() && socketRef.current) {
       socketRef.current.emit('submit_challenge', activeChallenge.id, answerInput.trim());
     }
   };
 
-  const activateAbility = (type: AbilityType, requiresTarget: boolean = false) => {
+  const activateAbility = (type: AbilityType, requiresTarget: boolean) => {
+    if (!socketRef.current) return;
     if (requiresTarget) {
       setActiveAbility(type);
-      setFeedback({ message: `Select a target for ${type}...`, type: 'info' });
+      setFeedback({ message: `Click a tile to target ${type}`, type: 'info' });
     } else {
       socketRef.current.emit('activate_ability', type);
     }
   };
 
-  const abilities = [
-    { type: AbilityType.Scout, cost: 20, icon: <RadarIcon />, target: true, color: '#4caf50' },
-    { type: AbilityType.Fortify, cost: 25, icon: <SecurityIcon />, target: true, color: '#2196f3' },
-    { type: AbilityType.Reinforce, cost: 30, icon: <UpgradeIcon />, target: true, color: '#ff9800' },
-    { type: AbilityType.Blitz, cost: 40, icon: <SpeedIcon />, target: false, color: '#f44336' },
-    { type: AbilityType.Airstrike, cost: 50, icon: <FlightTakeoffIcon />, target: true, color: '#9c27b0' },
-    { type: AbilityType.SupplySurge, cost: 60, icon: <BoltIcon />, target: false, color: '#ffeb3b' },
-  ];
+  const feedbackColor: Record<FeedbackType, string> = {
+    success: '#4caf50',
+    error:   '#f44336',
+    info:    '#00d4ff',
+    warning: '#ff9800',
+  };
 
   return (
     <Box
       sx={{
-        position: 'absolute',
-        bottom: 20,
-        left: '50%',
-        transform: 'translateX(-50%)',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
-        gap: 2,
-        zIndex: 1000,
-        pointerEvents: 'none', // Let clicks pass through empty space
+        height: '100%',
+        background: 'linear-gradient(180deg, rgba(5,10,20,0.97) 0%, rgba(10,20,40,0.97) 100%)',
+        borderLeft: '1px solid rgba(0, 212, 255, 0.2)',
+        padding: 1.5,
+        gap: 1.5,
+        overflowY: 'auto',
+        animation: feedbackAnim === 'success' ? `${successFlash} 0.8s ease` : 'none',
       }}
     >
-      {/* Challenge Window */}
-      <Box sx={{ display: 'flex', gap: 2, pointerEvents: 'auto' }}>
+      {/* ─── HEADER ─── */}
+      <Box sx={{ textAlign: 'center', pb: 0.5, borderBottom: '1px solid rgba(0,212,255,0.15)' }}>
+        <Typography
+          variant="overline"
+          sx={{ color: '#00d4ff', letterSpacing: 3, fontSize: '0.65rem', fontWeight: 700 }}
+        >
+          COMMANDER PANEL
+        </Typography>
+      </Box>
+
+      {/* ─── ENERGY ─── */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: 1.5,
+          background: 'rgba(0,212,255,0.04)',
+          border: '1px solid rgba(0,212,255,0.15)',
+          borderRadius: 2,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.8 }}>
+          <Typography sx={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.7rem', letterSpacing: 1.5, textTransform: 'uppercase' }}>
+            Energy
+          </Typography>
+          <Typography sx={{ color: '#00d4ff', fontWeight: 700, fontSize: '0.9rem' }}>
+            {energy} / 100
+          </Typography>
+        </Box>
+        <LinearProgress
+          variant="determinate"
+          value={Math.min(energy, 100)}
+          sx={{
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: 'rgba(255,255,255,0.08)',
+            '& .MuiLinearProgress-bar': {
+              background: energy >= 80
+                ? 'linear-gradient(90deg, #ff007a, #ff9800)'
+                : 'linear-gradient(90deg, #0055ff, #00d4ff)',
+              boxShadow: '0 0 8px rgba(0, 212, 255, 0.6)',
+              borderRadius: 4,
+              transition: 'width 0.5s ease',
+            }
+          }}
+        />
+      </Paper>
+
+      {/* ─── CHALLENGE SECTION ─── */}
+      <Box>
         {activeChallenge ? (
           <Paper
-            elevation={24}
+            elevation={0}
             sx={{
-              p: 2,
-              background: 'rgba(10, 20, 35, 0.85)',
-              backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(0, 212, 255, 0.3)',
-              borderRadius: 3,
-              animation: `${float} 4s ease-in-out infinite`,
-              color: 'white',
-              minWidth: 300,
+              p: 1.5,
+              background: 'rgba(0, 212, 255, 0.05)',
+              border: '1px solid rgba(0, 212, 255, 0.4)',
+              borderRadius: 2,
             }}
           >
-            <Typography variant="caption" sx={{ color: '#00d4ff', textTransform: 'uppercase', letterSpacing: 1 }}>
-              {activeChallenge.domain} Challenge
-            </Typography>
-            <Typography variant="h6" sx={{ my: 1, fontWeight: 'bold' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+              <Chip
+                label={activeChallenge.domain}
+                size="small"
+                sx={{
+                  background: 'rgba(0,212,255,0.15)',
+                  color: '#00d4ff',
+                  fontSize: '0.6rem',
+                  letterSpacing: 1,
+                  height: 18,
+                }}
+              />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
+                <TimerIcon sx={{ fontSize: 13, color: '#ff9800' }} />
+                <Typography sx={{ fontSize: '0.65rem', color: '#ff9800' }}>
+                  +{activeChallenge.rewardEnergy}E on correct
+                </Typography>
+              </Box>
+            </Box>
+            <Typography
+              variant="body2"
+              sx={{ color: 'white', fontWeight: 600, my: 1, lineHeight: 1.4, fontSize: '0.82rem' }}
+            >
               {activeChallenge.question}
             </Typography>
-            <form onSubmit={submitChallenge} style={{ display: 'flex', gap: '8px' }}>
+            <form onSubmit={submitChallenge} style={{ display: 'flex', gap: 6 }}>
               <TextField
                 variant="outlined"
                 size="small"
                 autoFocus
+                fullWidth
                 value={answerInput}
-                onChange={(e) => setAnswerInput(e.target.value)}
-                placeholder="Enter answer..."
+                onChange={e => setAnswerInput(e.target.value)}
+                placeholder="Type answer..."
                 sx={{
-                  input: { color: 'white' },
+                  '& .MuiInputBase-input': { color: 'white', fontSize: '0.82rem', padding: '6px 10px' },
                   '& .MuiOutlinedInput-root': {
-                    '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' },
+                    '& fieldset': { borderColor: 'rgba(255,255,255,0.2)' },
                     '&:hover fieldset': { borderColor: '#00d4ff' },
                     '&.Mui-focused fieldset': { borderColor: '#00d4ff' },
-                  }
+                  },
                 }}
               />
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 variant="contained"
-                sx={{ 
+                sx={{
                   background: 'linear-gradient(45deg, #00d4ff, #0055ff)',
                   color: 'white',
-                  fontWeight: 'bold',
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                  px: 1.5,
+                  minWidth: 60,
                   '&:hover': { background: 'linear-gradient(45deg, #0055ff, #00d4ff)' }
                 }}
               >
-                Submit
+                GO
               </Button>
             </form>
           </Paper>
         ) : (
           <Button
+            fullWidth
             variant="contained"
             onClick={requestChallenge}
+            disabled={onCooldown}
             startIcon={<BoltIcon />}
             sx={{
-              background: 'linear-gradient(45deg, #ff007a, #7a00ff)',
-              color: 'white',
-              fontWeight: 'bold',
-              borderRadius: 8,
-              px: 4,
-              py: 1.5,
-              animation: `${pulse} 2s infinite`,
-              boxShadow: '0 4px 15px rgba(255, 0, 122, 0.4)',
-              transition: 'transform 0.2s',
-              '&:hover': { transform: 'scale(1.05)' }
+              background: onCooldown
+                ? 'rgba(100,100,100,0.3)'
+                : 'linear-gradient(45deg, #ff007a, #7a00ff)',
+              color: onCooldown ? 'rgba(255,255,255,0.4)' : 'white',
+              fontWeight: 700,
+              borderRadius: 2,
+              py: 1.2,
+              fontSize: '0.78rem',
+              letterSpacing: 1,
+              animation: !onCooldown ? `${pulse} 2s infinite` : 'none',
+              transition: 'all 0.3s ease',
+              '&:hover:not(:disabled)': { transform: 'scale(1.02)' }
             }}
           >
-            Request Challenge
+            {onCooldown ? 'RECHARGING...' : 'REQUEST CHALLENGE'}
           </Button>
         )}
       </Box>
 
-      {/* Feedback Message */}
+      {/* ─── FEEDBACK ─── */}
       {feedback && (
-        <Typography 
-          variant="subtitle1" 
-          sx={{ 
-            color: feedback.type === 'success' ? '#4caf50' : feedback.type === 'info' ? '#00d4ff' : '#f44336',
-            textShadow: '0 0 10px rgba(0,0,0,0.8)',
-            fontWeight: 'bold',
-            pointerEvents: 'auto'
+        <Typography
+          variant="caption"
+          sx={{
+            textAlign: 'center',
+            color: feedbackColor[feedback.type],
+            fontWeight: 600,
+            fontSize: '0.72rem',
+            animation: feedbackAnim === 'error' ? `${shake} 0.4s ease` : 'none',
+            px: 1,
           }}
         >
           {feedback.message}
         </Typography>
       )}
 
-      {/* Energy Bar & Abilities */}
-      <Paper
-        elevation={24}
-        sx={{
-          p: 1.5,
-          background: 'rgba(15, 15, 25, 0.9)',
-          backdropFilter: 'blur(15px)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
-          borderRadius: 4,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 1.5,
-          pointerEvents: 'auto',
-        }}
-      >
-        <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', gap: 2 }}>
-          <BoltIcon sx={{ color: '#00d4ff', animation: `${glow} 2s infinite` }} />
-          <Box sx={{ flexGrow: 1, position: 'relative' }}>
-            <LinearProgress 
-              variant="determinate" 
-              value={energy} 
-              sx={{
-                height: 12,
-                borderRadius: 6,
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                '& .MuiLinearProgress-bar': {
-                  background: 'linear-gradient(90deg, #0055ff, #00d4ff)',
-                  boxShadow: '0 0 10px #00d4ff',
-                  borderRadius: 6,
-                }
-              }}
-            />
-          </Box>
-          <Typography sx={{ color: 'white', fontWeight: 'bold', width: 40, textAlign: 'right' }}>
-            {energy}%
-          </Typography>
-        </Box>
+      {/* ─── ABILITIES ─── */}
+      <Box>
+        <Typography
+          sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem', letterSpacing: 1.5, textTransform: 'uppercase', mb: 1 }}
+        >
+          Abilities
+        </Typography>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0.75 }}>
+          {ABILITIES.map(ability => {
+            const cost         = ABILITY_COSTS[ability.type];
+            const isAffordable = energy >= cost;
+            const isActive     = activeAbility === ability.type;
 
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          {abilities.map((ability) => {
-            const isAffordable = energy >= ability.cost;
-            const isActive = activeAbility === ability.type;
             return (
-              <Tooltip key={ability.type} title={`${ability.type} (Cost: ${ability.cost}E)`} placement="top">
+              <Tooltip key={ability.type} title={`${ability.type} (${cost}E)`} placement="top" arrow>
                 <span>
-                  <IconButton
-                    disabled={!isAffordable && !isActive}
-                    onClick={() => activateAbility(ability.type, ability.target)}
+                  <Box
+                    onClick={() => isAffordable ? activateAbility(ability.type, ability.target) : undefined}
                     sx={{
-                      color: isAffordable ? 'white' : 'rgba(255,255,255,0.3)',
-                      background: isActive 
-                        ? `linear-gradient(135deg, ${ability.color}, #ffffff)`
-                        : isAffordable 
-                          ? `linear-gradient(135deg, rgba(255,255,255,0.1), ${ability.color}55)` 
-                          : 'rgba(255,255,255,0.05)',
-                      border: `1px solid ${isAffordable ? ability.color : 'transparent'}`,
-                      transition: 'all 0.3s ease',
-                      '&:hover': {
-                        transform: 'translateY(-3px)',
-                        boxShadow: `0 5px 15px ${ability.color}88`,
-                        background: `linear-gradient(135deg, ${ability.color}, #ffffff)`
-                      }
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 0.3,
+                      p: 0.8,
+                      borderRadius: 1.5,
+                      cursor: isAffordable ? 'pointer' : 'not-allowed',
+                      background: isActive
+                        ? `linear-gradient(135deg, ${ability.color}55, ${ability.color}33)`
+                        : isAffordable
+                          ? 'rgba(255,255,255,0.05)'
+                          : 'rgba(255,255,255,0.02)',
+                      border: `1px solid ${isActive ? ability.color : isAffordable ? ability.color + '55' : 'rgba(255,255,255,0.06)'}`,
+                      transition: 'all 0.2s ease',
+                      '&:hover': isAffordable ? {
+                        background: `${ability.color}22`,
+                        border: `1px solid ${ability.color}`,
+                        transform: 'translateY(-2px)',
+                      } : {},
                     }}
                   >
-                    {ability.icon}
-                  </IconButton>
+                    <Box sx={{
+                      color: isAffordable ? 'white' : 'rgba(255,255,255,0.25)',
+                      '& svg': { fontSize: 18 },
+                      ...(isActive && { animation: `${glow} 1.5s infinite` }),
+                    }}>
+                      {ability.icon}
+                    </Box>
+                    <Typography sx={{ fontSize: '0.55rem', color: isAffordable ? ability.color : 'rgba(255,255,255,0.2)', letterSpacing: 0.5 }}>
+                      {cost}E
+                    </Typography>
+                  </Box>
                 </span>
               </Tooltip>
             );
           })}
         </Box>
-      </Paper>
+      </Box>
+
+      {/* ─── TARGET MODE NOTICE ─── */}
+      {activeAbility && (
+        <Paper
+          elevation={0}
+          sx={{
+            p: 1,
+            background: 'rgba(255,152,0,0.1)',
+            border: '1px solid rgba(255,152,0,0.4)',
+            borderRadius: 1.5,
+            textAlign: 'center',
+          }}
+        >
+          <Typography sx={{ color: '#ff9800', fontSize: '0.7rem', fontWeight: 600 }}>
+            🎯 Click a map tile to target {activeAbility}
+          </Typography>
+          <Button
+            size="small"
+            onClick={() => { setActiveAbility(null); setFeedback(null); }}
+            sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.6rem', mt: 0.3 }}
+          >
+            Cancel
+          </Button>
+        </Paper>
+      )}
     </Box>
   );
 }

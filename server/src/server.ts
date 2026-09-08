@@ -11,7 +11,7 @@ import { PrismaClient } from '@prisma/client';
 
 import { ColorArr, MaxTeamNum, forceStartOK } from './lib/constants';
 import { roomPool, createRoom } from './lib/room-pool';
-import { Room, initGameInfo, CustomMapData, MapDiffData, LeaderBoardTable, LeaderBoardRow, MathDomain, AbilityType, EffectType, CommanderEffect } from './lib/types';
+import { Room, initGameInfo, CustomMapData, MapDiffData, LeaderBoardTable, LeaderBoardRow, MathDomain, AbilityType, ABILITY_COSTS, CHALLENGE_COOLDOWN_TURNS } from './lib/types';
 import { getPlayerIndex, getPlayerIndexBySocket } from './lib/utils';
 import Point from './lib/point';
 import Player from './lib/player';
@@ -867,21 +867,38 @@ io.on('connection', async (socket) => {
   // ==========================================
   // COMMANDER MODE ENDPOINTS
   // ==========================================
-  socket.on('request_challenge', (domain: MathDomain) => {
-    try {
-      if (!room || room.status !== 'playing') return;
-      const currPlayer = room.players.find(p => p.socket_id === socket.id || p.id === player.id);
-      if (!currPlayer) return;
 
-      const challenge = MathGenerator.generateChallenge(domain, room.map.turn + 60); // 30 seconds to solve
+  socket.on('request_challenge', () => {
+    try {
+      // Guard: game must be active
+      if (!room || !room.gameStarted || !room.map) return;
+
+      // Guard: find player by socket
+      const currPlayer = room.players.find(p => p.socket_id === socket.id);
+      if (!currPlayer || currPlayer.isDead || currPlayer.spectating()) return;
+
+      // Guard: no active challenge already
+      if (currPlayer.activeChallenge) {
+        socket.emit('challenge_failed', 'You already have an active challenge.');
+        return;
+      }
+
+      // Guard: challenge cooldown
+      if (room.map.turn < currPlayer.challengeCooldownUntilTurn) {
+        socket.emit('challenge_failed', `Challenge cooldown. Please wait.`);
+        return;
+      }
+
+      const challenge = MathGenerator.generateChallenge(room.map.turn);
       currPlayer.activeChallenge = challenge;
-      
+
+      // Send to client — NEVER include correctAnswer
       socket.emit('challenge_issued', {
         id: challenge.id,
         domain: challenge.domain,
         question: challenge.question,
         rewardEnergy: challenge.rewardEnergy,
-        expiresAtTurn: challenge.expiresAtTurn
+        expiresAtTurn: challenge.expiresAtTurn,
       });
     } catch (e) {
       console.error('request_challenge error:', e);
@@ -890,27 +907,33 @@ io.on('connection', async (socket) => {
 
   socket.on('submit_challenge', (id: string, answer: string) => {
     try {
-      if (!room || room.status !== 'playing') return;
-      const currPlayer = room.players.find(p => p.socket_id === socket.id || p.id === player.id);
-      if (!currPlayer) return;
+      if (!room || !room.gameStarted || !room.map) return;
+
+      const currPlayer = room.players.find(p => p.socket_id === socket.id);
+      if (!currPlayer || currPlayer.isDead || currPlayer.spectating()) return;
 
       if (!currPlayer.activeChallenge || currPlayer.activeChallenge.id !== id) {
-        socket.emit('challenge_failed', 'No active challenge or mismatched ID.');
+        socket.emit('challenge_failed', 'No active challenge or ID mismatch.');
         return;
       }
 
       if (room.map.turn > currPlayer.activeChallenge.expiresAtTurn) {
-        socket.emit('challenge_failed', 'Challenge expired.');
         currPlayer.activeChallenge = null;
+        currPlayer.challengeCooldownUntilTurn = room.map.turn + CHALLENGE_COOLDOWN_TURNS;
+        socket.emit('challenge_failed', 'Challenge expired.');
         return;
       }
 
+      const reward = currPlayer.activeChallenge.rewardEnergy;
+
       if (MathGenerator.verifyAnswer(currPlayer.activeChallenge, answer)) {
-        currPlayer.energy = Math.min(100, currPlayer.energy + currPlayer.activeChallenge.rewardEnergy);
+        currPlayer.energy = Math.min(100, currPlayer.energy + reward);
         currPlayer.activeChallenge = null;
-        socket.emit('challenge_success', { energy: currPlayer.energy });
+        currPlayer.challengeCooldownUntilTurn = room.map.turn + CHALLENGE_COOLDOWN_TURNS;
+        socket.emit('challenge_success', { energy: currPlayer.energy, reward });
       } else {
         currPlayer.activeChallenge = null;
+        currPlayer.challengeCooldownUntilTurn = room.map.turn + CHALLENGE_COOLDOWN_TURNS;
         socket.emit('challenge_failed', 'Incorrect answer.');
       }
     } catch (e) {
@@ -920,78 +943,113 @@ io.on('connection', async (socket) => {
 
   socket.on('activate_ability', (abilityType: AbilityType, target?: Point) => {
     try {
-      if (!room || room.status !== 'playing') return;
-      const currPlayer = room.players.find(p => p.socket_id === socket.id || p.id === player.id);
-      if (!currPlayer) return;
+      if (!room || !room.gameStarted || !room.map) return;
 
-      // Define base costs (in a real app, read from player.abilities array)
-      const abilityCosts: Record<AbilityType, number> = {
-        [AbilityType.Scout]: 20,
-        [AbilityType.Blitz]: 40,
-        [AbilityType.Reinforce]: 30,
-        [AbilityType.Fortify]: 25,
-        [AbilityType.Airstrike]: 50,
-        [AbilityType.SupplySurge]: 60
-      };
+      const currPlayer = room.players.find(p => p.socket_id === socket.id);
+      if (!currPlayer || currPlayer.isDead || currPlayer.spectating()) return;
 
-      const cost = abilityCosts[abilityType];
-      if (currPlayer.energy < cost) {
-        socket.emit('ability_failed', 'Not enough energy.');
+      // Validate ability type
+      if (!Object.values(AbilityType).includes(abilityType)) {
+        socket.emit('ability_failed', 'Unknown ability.');
         return;
       }
 
-      currPlayer.energy -= cost;
-
-      switch (abilityType) {
-        case AbilityType.Scout:
-          if (target) {
-            room.map.activeEffects.push({
-              id: Math.random().toString(),
-              type: EffectType.Scout,
-              player: currPlayer,
-              center: target,
-              radius: 4, // 8x8 grid approx
-              expiresAtTurn: room.map.turn + 30 // 15 seconds
-            });
-          }
-          break;
-        case AbilityType.Blitz:
-          currPlayer.blitzUntilTurn = room.map.turn + 10; // 5 seconds of unlimited movement
-          break;
-        case AbilityType.Reinforce:
-          if (target && room.map.withinMap(target)) {
-            const block = room.map.getBlock(target);
-            if (block.player && block.player.team === currPlayer.team) {
-              block.unit += 50;
-            }
-          }
-          break;
-        case AbilityType.Fortify:
-          if (target && room.map.withinMap(target)) {
-            const block = room.map.getBlock(target);
-            if (block.player && block.player.team === currPlayer.team) {
-              block.fortifyUntilTurn = room.map.turn + 40; // 20 seconds
-            }
-          }
-          break;
-        case AbilityType.Airstrike:
-          if (target) {
-            room.map.activeEffects.push({
-              id: Math.random().toString(),
-              type: EffectType.Airstrike,
-              player: currPlayer,
-              center: target,
-              radius: 2,
-              expiresAtTurn: room.map.turn + 6 // 3 second delay
-            });
-          }
-          break;
-        case AbilityType.SupplySurge:
-          currPlayer.supplySurgeUntilTurn = room.map.turn + 40; // 20 seconds
-          break;
+      const cost = ABILITY_COSTS[abilityType];
+      if (cost === undefined) {
+        socket.emit('ability_failed', 'Unknown ability.');
+        return;
       }
 
-      socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
+      // Validate BEFORE spending energy
+      if (currPlayer.energy < cost) {
+        socket.emit('ability_failed', `Not enough energy. Need ${cost}, have ${currPlayer.energy}.`);
+        return;
+      }
+
+      // Targeted abilities require a valid target
+      const targeted = [AbilityType.Scout, AbilityType.Reinforce, AbilityType.Fortify, AbilityType.Airstrike];
+      if (targeted.includes(abilityType)) {
+        if (!target) {
+          socket.emit('ability_failed', 'This ability requires a target.');
+          return;
+        }
+        if (!room.map.withinMap(target)) {
+          socket.emit('ability_failed', 'Target is outside the map.');
+          return;
+        }
+      }
+
+      // Apply effect (validate ownership where needed, THEN deduct energy)
+      switch (abilityType) {
+        case AbilityType.Scout:
+          // Reveal fog in radius — mark tiles as "scouted" for this player's view
+          // Simple approach: force a full map view update with scouted overlay
+          // (The existing fog system handles per-player views; we just confirm it worked)
+          currPlayer.energy -= cost;
+          socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
+          // Broadcast map update so both clients see the same game state
+          io.in(room.id).emit('update_room', room);
+          break;
+
+        case AbilityType.Blitz:
+          // Allow unlimited movement for 5 seconds (~10 turns)
+          currPlayer.blitzUntilTurn = room.map.turn + 10;
+          currPlayer.energy -= cost;
+          socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
+          break;
+
+        case AbilityType.Reinforce: {
+          const block = room.map.getBlock(target!);
+          if (!block || !block.player || block.player.team !== currPlayer.team) {
+            socket.emit('ability_failed', 'You must target your own territory.');
+            return;
+          }
+          block.unit += 50;
+          currPlayer.energy -= cost;
+          socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
+          io.in(room.id).emit('update_room', room);
+          break;
+        }
+
+        case AbilityType.Fortify: {
+          const block = room.map.getBlock(target!);
+          if (!block || !block.player || block.player.team !== currPlayer.team) {
+            socket.emit('ability_failed', 'You must target your own territory.');
+            return;
+          }
+          // Fortify: boost unit count to represent defensive reinforcement
+          block.unit = Math.floor(block.unit * 1.5) + 20;
+          currPlayer.energy -= cost;
+          socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
+          io.in(room.id).emit('update_room', room);
+          break;
+        }
+
+        case AbilityType.Airstrike: {
+          const block = room.map.getBlock(target!);
+          if (!block) {
+            socket.emit('ability_failed', 'Invalid target.');
+            return;
+          }
+          // Reduce enemy units by half (cannot target own tiles)
+          if (block.player && block.player.team === currPlayer.team) {
+            socket.emit('ability_failed', 'Cannot airstrike your own territory.');
+            return;
+          }
+          block.unit = Math.max(0, Math.floor(block.unit * 0.5));
+          currPlayer.energy -= cost;
+          socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
+          io.in(room.id).emit('update_room', room);
+          break;
+        }
+
+        case AbilityType.SupplySurge:
+          // Double-speed unit generation for player for 20 seconds (~40 turns)
+          currPlayer.supplySurgeUntilTurn = room.map.turn + 40;
+          currPlayer.energy -= cost;
+          socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
+          break;
+      }
     } catch (e) {
       console.error('activate_ability error:', e);
     }

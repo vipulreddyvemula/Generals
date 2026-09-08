@@ -1,7 +1,14 @@
 import Block from './block';
 import Point from './point';
 import Player from './player';
-import { TileType, CustomMapData, CommanderEffect, EffectType } from './types';
+import { TileType, CustomMapData } from './types';
+
+// Local effect type constants (defined here since they're only used by GameMap)
+const EffectType = {
+  Scout: 'Scout',
+  Airstrike: 'Airstrike',
+} as const;
+
 
 const directions = [
   new Point(-1, -1),
@@ -29,7 +36,8 @@ class GameMap {
   map: Block[][];
   turn: number;
   minKingDistance: number;
-  activeEffects: CommanderEffect[] = [];
+  activeEffects: any[] = [];
+
 
   constructor(
     public id: string,

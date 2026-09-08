@@ -41,20 +41,21 @@ export interface ChallengeState {
   expiresAtTurn: number;
 }
 
-export enum EffectType {
-  Scout = 'Scout',
-  Airstrike = 'Airstrike',
-}
+// ============================================================
+// ABILITY COSTS — authoritative values shared across server
+// Client must mirror these exactly.
+// ============================================================
+export const ABILITY_COSTS: Record<AbilityType, number> = {
+  [AbilityType.Scout]:       20,
+  [AbilityType.Blitz]:       25,
+  [AbilityType.Reinforce]:   30,
+  [AbilityType.Fortify]:     35,
+  [AbilityType.Airstrike]:   60,
+  [AbilityType.SupplySurge]: 80,
+};
 
-export interface CommanderEffect {
-  id: string;
-  type: EffectType;
-  player: UserData;
-  center: Point;
-  expiresAtTurn: number;
-  radius: number;
-}
-// ----------------------------
+// Cooldown in turns after a challenge (correct or incorrect)
+export const CHALLENGE_COOLDOWN_TURNS = 20;
 
 export interface initGameInfo {
   king: Position;

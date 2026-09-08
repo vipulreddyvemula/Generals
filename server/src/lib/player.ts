@@ -25,10 +25,13 @@ class Player {
     public energy: number = 0,
     public abilities: AbilityState[] = [],
     public activeChallenge: ChallengeState | null = null,
-    
+
     // Commander Effects
     public blitzUntilTurn: number = 0,
     public supplySurgeUntilTurn: number = 0,
+
+    // Challenge cooldown: no new challenge until turn > this value
+    public challengeCooldownUntilTurn: number = 0,
   ) { }
 
   setSpectate(): void { this.team = MaxTeamNum + 1; }
@@ -55,10 +58,11 @@ class Player {
     
     // Reset Commander Mode State
     this.energy = 0;
-    this.abilities = []; // Will be initialized by the game engine
+    this.abilities = [];
     this.activeChallenge = null;
     this.blitzUntilTurn = 0;
     this.supplySurgeUntilTurn = 0;
+    this.challengeCooldownUntilTurn = 0;
   }
 
   setRoomHost(value: boolean): void {
