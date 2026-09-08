@@ -11,13 +11,14 @@ import { PrismaClient } from '@prisma/client';
 
 import { ColorArr, MaxTeamNum, forceStartOK } from './lib/constants';
 import { roomPool, createRoom } from './lib/room-pool';
-import { Room, initGameInfo, CustomMapData, MapDiffData, LeaderBoardTable, LeaderBoardRow } from './lib/types';
+import { Room, initGameInfo, CustomMapData, MapDiffData, LeaderBoardTable, LeaderBoardRow, MathDomain, AbilityType, EffectType, CommanderEffect } from './lib/types';
 import { getPlayerIndex, getPlayerIndexBySocket } from './lib/utils';
 import Point from './lib/point';
 import Player from './lib/player';
 import GameMap from './lib/map';
 import MapDiff from './lib/map-diff';
 import GameRecord from './lib/game-record';
+import { MathGenerator } from './lib/commander/math-generator';
 
 dotenv.config();
 
@@ -796,7 +797,7 @@ io.on('connection', async (socket) => {
   socket.on('force_start', async () => {
     try {
       let playerIndex = getPlayerIndex(room, player.id);
-      if (!room.players[playerIndex].spectating()) {
+      if (playerIndex !== -1 && room.players[playerIndex] && !room.players[playerIndex].spectating()) {
         if (room.players[playerIndex].forceStart === true) {
           room.players[playerIndex].forceStart = false;
           --room.forceStartNum;
@@ -838,21 +839,22 @@ io.on('connection', async (socket) => {
       let playerIndex = getPlayerIndexBySocket(room, socket.id);
       if (playerIndex !== -1) {
         let player = room.players[playerIndex];
-        if (room.map && player.operatedTurn < room.map.turn && room.map.commendable(player, from, to)) {
+        const canOperate = player.operatedTurn < room.map.turn || player.blitzUntilTurn > room.map.turn;
+        if (room.map && canOperate && room.map.commendable(player, from, to)) {
           if (isHalf) {
             room.map.moveHalfMovableUnit(player, from, to);
           } else {
             room.map.moveAllMovableUnit(player, from, to);
           }
 
-          room.players[playerIndex].operatedTurn = room.map.turn;
+          player.operatedTurn = room.map.turn;
           socket.emit('attack_success', from, to, room.map.turn);
         } else {
           socket.emit(
             'attack_failure',
             from,
             to,
-            `Invalid operation: ${player.operatedTurn} ${room.map.turn} ${room.map.commendable(player, from, to)}`
+            `Invalid operation: ${player.operatedTurn} ${player.blitzUntilTurn} ${room.map.turn} ${room.map.commendable(player, from, to)}`
           );
         }
       }
@@ -861,4 +863,138 @@ io.on('connection', async (socket) => {
       console.error(JSON.stringify(e, ['message', 'arguments', 'type', 'name']));
     }
   });
+
+  // ==========================================
+  // COMMANDER MODE ENDPOINTS
+  // ==========================================
+  socket.on('request_challenge', (domain: MathDomain) => {
+    try {
+      if (!room || room.status !== 'playing') return;
+      const currPlayer = room.players.find(p => p.socket_id === socket.id || p.id === player.id);
+      if (!currPlayer) return;
+
+      const challenge = MathGenerator.generateChallenge(domain, room.map.turn + 60); // 30 seconds to solve
+      currPlayer.activeChallenge = challenge;
+      
+      socket.emit('challenge_issued', {
+        id: challenge.id,
+        domain: challenge.domain,
+        question: challenge.question,
+        rewardEnergy: challenge.rewardEnergy,
+        expiresAtTurn: challenge.expiresAtTurn
+      });
+    } catch (e) {
+      console.error('request_challenge error:', e);
+    }
+  });
+
+  socket.on('submit_challenge', (id: string, answer: string) => {
+    try {
+      if (!room || room.status !== 'playing') return;
+      const currPlayer = room.players.find(p => p.socket_id === socket.id || p.id === player.id);
+      if (!currPlayer) return;
+
+      if (!currPlayer.activeChallenge || currPlayer.activeChallenge.id !== id) {
+        socket.emit('challenge_failed', 'No active challenge or mismatched ID.');
+        return;
+      }
+
+      if (room.map.turn > currPlayer.activeChallenge.expiresAtTurn) {
+        socket.emit('challenge_failed', 'Challenge expired.');
+        currPlayer.activeChallenge = null;
+        return;
+      }
+
+      if (MathGenerator.verifyAnswer(currPlayer.activeChallenge, answer)) {
+        currPlayer.energy = Math.min(100, currPlayer.energy + currPlayer.activeChallenge.rewardEnergy);
+        currPlayer.activeChallenge = null;
+        socket.emit('challenge_success', { energy: currPlayer.energy });
+      } else {
+        currPlayer.activeChallenge = null;
+        socket.emit('challenge_failed', 'Incorrect answer.');
+      }
+    } catch (e) {
+      console.error('submit_challenge error:', e);
+    }
+  });
+
+  socket.on('activate_ability', (abilityType: AbilityType, target?: Point) => {
+    try {
+      if (!room || room.status !== 'playing') return;
+      const currPlayer = room.players.find(p => p.socket_id === socket.id || p.id === player.id);
+      if (!currPlayer) return;
+
+      // Define base costs (in a real app, read from player.abilities array)
+      const abilityCosts: Record<AbilityType, number> = {
+        [AbilityType.Scout]: 20,
+        [AbilityType.Blitz]: 40,
+        [AbilityType.Reinforce]: 30,
+        [AbilityType.Fortify]: 25,
+        [AbilityType.Airstrike]: 50,
+        [AbilityType.SupplySurge]: 60
+      };
+
+      const cost = abilityCosts[abilityType];
+      if (currPlayer.energy < cost) {
+        socket.emit('ability_failed', 'Not enough energy.');
+        return;
+      }
+
+      currPlayer.energy -= cost;
+
+      switch (abilityType) {
+        case AbilityType.Scout:
+          if (target) {
+            room.map.activeEffects.push({
+              id: Math.random().toString(),
+              type: EffectType.Scout,
+              player: currPlayer,
+              center: target,
+              radius: 4, // 8x8 grid approx
+              expiresAtTurn: room.map.turn + 30 // 15 seconds
+            });
+          }
+          break;
+        case AbilityType.Blitz:
+          currPlayer.blitzUntilTurn = room.map.turn + 10; // 5 seconds of unlimited movement
+          break;
+        case AbilityType.Reinforce:
+          if (target && room.map.withinMap(target)) {
+            const block = room.map.getBlock(target);
+            if (block.player && block.player.team === currPlayer.team) {
+              block.unit += 50;
+            }
+          }
+          break;
+        case AbilityType.Fortify:
+          if (target && room.map.withinMap(target)) {
+            const block = room.map.getBlock(target);
+            if (block.player && block.player.team === currPlayer.team) {
+              block.fortifyUntilTurn = room.map.turn + 40; // 20 seconds
+            }
+          }
+          break;
+        case AbilityType.Airstrike:
+          if (target) {
+            room.map.activeEffects.push({
+              id: Math.random().toString(),
+              type: EffectType.Airstrike,
+              player: currPlayer,
+              center: target,
+              radius: 2,
+              expiresAtTurn: room.map.turn + 6 // 3 second delay
+            });
+          }
+          break;
+        case AbilityType.SupplySurge:
+          currPlayer.supplySurgeUntilTurn = room.map.turn + 40; // 20 seconds
+          break;
+      }
+
+      socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
+    } catch (e) {
+      console.error('activate_ability error:', e);
+    }
+  });
+
 });

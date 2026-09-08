@@ -1,7 +1,7 @@
 import Block from './block';
 import Point from './point';
 import Player from './player';
-import { TileType, CustomMapData } from './types';
+import { TileType, CustomMapData, CommanderEffect, EffectType } from './types';
 
 const directions = [
   new Point(-1, -1),
@@ -29,6 +29,7 @@ class GameMap {
   map: Block[][];
   turn: number;
   minKingDistance: number;
+  activeEffects: CommanderEffect[] = [];
 
   constructor(
     public id: string,
@@ -355,6 +356,28 @@ class GameMap {
 
   updateTurn(): void {
     this.turn++;
+    
+    // Process Commander Effects
+    for (let i = this.activeEffects.length - 1; i >= 0; i--) {
+      const effect = this.activeEffects[i];
+      if (effect.expiresAtTurn <= this.turn) {
+        if (effect.type === EffectType.Airstrike) {
+          // Execute Airstrike: Halve enemy units in radius
+          for (let dx = -effect.radius; dx <= effect.radius; dx++) {
+            for (let dy = -effect.radius; dy <= effect.radius; dy++) {
+              const pt = new Point(effect.center.x + dx, effect.center.y + dy);
+              if (this.withinMap(pt)) {
+                const block = this.getBlock(pt);
+                if (block.player && block.player.team !== effect.player.team) {
+                  block.unit = Math.floor(block.unit / 2);
+                }
+              }
+            }
+          }
+        }
+        this.activeEffects.splice(i, 1);
+      }
+    }
   }
 
   updateUnit(): void {
@@ -363,14 +386,15 @@ class GameMap {
         switch (this.map[i][j].type) {
           case TileType.Plain:
             if (this.map[i][j].player && this.turn % 50 === 0)
-              ++this.map[i][j].unit;
+              this.map[i][j].unit += (this.map[i][j].player.supplySurgeUntilTurn > this.turn) ? 2 : 1;
             break;
           case TileType.King:
-            if (this.turn % 2 === 0) ++this.map[i][j].unit;
+            if (this.turn % 2 === 0)
+              this.map[i][j].unit += (this.map[i][j].player.supplySurgeUntilTurn > this.turn) ? 2 : 1;
             break;
           case TileType.City:
             if (this.map[i][j].player && this.turn % 2 === 0)
-              ++this.map[i][j].unit;
+              this.map[i][j].unit += (this.map[i][j].player.supplySurgeUntilTurn > this.turn) ? 2 : 1;
             break;
           case TileType.Swamp:
             if (this.map[i][j].player && this.turn % 2 === 0)
@@ -485,6 +509,26 @@ class GameMap {
         }
       }
     }
+    
+    // Process Scout Effects for this player
+    for (const effect of this.activeEffects) {
+      if (effect.type === EffectType.Scout && effect.player.team === player.team) {
+        for (let dx = -effect.radius; dx <= effect.radius; dx++) {
+          for (let dy = -effect.radius; dy <= effect.radius; dy++) {
+            const pt = new Point(effect.center.x + dx, effect.center.y + dy);
+            if (this.withinMap(pt)) {
+              const origin = this.getBlock(pt);
+              const block = new Block(
+                origin.x, origin.y, origin.type, origin.unit, origin.player, origin.isAlwaysRevealed
+              );
+              block.unitsCountRevealed = true;
+              viewOfPlayer[pt.x][pt.y] = block;
+            }
+          }
+        }
+      }
+    }
+
     return new Promise(function (resolve, reject) {
       resolve(viewOfPlayer);
     });

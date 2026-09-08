@@ -11,7 +11,8 @@ class Block extends Point {
     public player: any = null,
     public isAlwaysRevealed: boolean = false,
     public priority: number = 0,
-    public unitsCountRevealed: boolean = true
+    public unitsCountRevealed: boolean = true,
+    public fortifyUntilTurn: number = 0
   ) {
     super(x, y);
   }
@@ -42,15 +43,24 @@ class Block extends Point {
     this.player = player;
   }
 
-  enterUnit(player: any, unit: number): void {
+  enterUnit(player: any, unit: number, currentTurn: number = 0): void {
     if (this.player && this.player.team === player.team) {
       this.unit += unit;
       if (this.type !== TileType.King) this.beDominated(player, unit);
     } else {
-      if (this.unit >= unit) {
-        this.unit -= unit;
-      } else if (this.unit < unit) {
-        this.unit = unit - this.unit;
+      let defenseUnit = this.unit;
+      if (this.fortifyUntilTurn > currentTurn) {
+        defenseUnit *= 2; // Fortify multiplies defense by 2
+      }
+      
+      if (defenseUnit >= unit) {
+        this.unit = defenseUnit - unit;
+        if (this.fortifyUntilTurn > currentTurn) {
+          this.unit = Math.ceil(this.unit / 2); // Restore actual unit count
+        }
+      } else {
+        this.unit = unit - defenseUnit;
+        this.fortifyUntilTurn = 0; // Fortify broken
         this.beDominated(player, unit);
       }
     }

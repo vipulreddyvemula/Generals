@@ -4,6 +4,7 @@ import GameMap from './GameMap';
 import LeaderBoard from './LeaderBoard';
 import TurnsCount from './TurnsCount';
 import OverDialog from './OverDialog';
+import CommanderPanel from './CommanderPanel';
 import { Box } from '@mui/material';
 import { useGame, useGameDispatch } from '@/context/GameContext';
 
@@ -35,6 +36,7 @@ export default function Game() {
         warringStatesMode={room.warringStatesMode}
       />
       <GameMap />
+      <CommanderPanel />
       <SurrenderDialog
         isOpen={isSurrenderDialogOpen}
         setOpen={setSurrenderDialogOpen}

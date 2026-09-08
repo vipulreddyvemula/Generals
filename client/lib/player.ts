@@ -1,6 +1,6 @@
 import Block from './block';
 import MapDiff from './map-diff';
-import { UserData, TileType } from './types';
+import { UserData, TileType, ChallengeState, AbilityState } from './types';
 import { MaxTeamNum } from './constants';
 
 class Player {
@@ -20,6 +20,9 @@ class Player {
     // when player disconnect, don't delete to keep game data
     // clear disconnect player when game ended
     public disconnected: boolean = false,
+    public energy: number = 0,
+    public activeChallenge: ChallengeState | null = null,
+    public abilities: AbilityState[] = [],
   ) { }
 
   setSpectate(): void { this.team = MaxTeamNum + 1; }

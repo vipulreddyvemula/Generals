@@ -6,6 +6,56 @@ import GameRecord from './game-record';
 
 export { Point, Player, GameMap, MapDiff };
 
+// ==========================================
+// COMMANDER MODE TYPES
+// ==========================================
+export enum MathDomain {
+  Arithmetic = 'Arithmetic',
+  Algebra = 'Algebra',
+  Sequence = 'Sequence',
+  Geometry = 'Geometry',
+  Probability = 'Probability',
+  Logic = 'Logic'
+}
+
+export enum AbilityType {
+  Scout = 'Scout',
+  Blitz = 'Blitz',
+  Reinforce = 'Reinforce',
+  Fortify = 'Fortify',
+  Airstrike = 'Airstrike',
+  SupplySurge = 'SupplySurge'
+}
+
+export interface AbilityState {
+  type: AbilityType;
+  cooldownRemaining: number;
+}
+
+export interface ChallengeState {
+  id: string;
+  domain: MathDomain;
+  question: string;
+  correctAnswer: string;
+  rewardEnergy: number;
+  expiresAtTurn: number;
+}
+
+export enum EffectType {
+  Scout = 'Scout',
+  Airstrike = 'Airstrike',
+}
+
+export interface CommanderEffect {
+  id: string;
+  type: EffectType;
+  player: UserData;
+  center: Position;
+  expiresAtTurn: number;
+  radius: number;
+}
+// ==========================================
+
 export interface initGameInfo {
   king: Position;
   mapWidth: number;

@@ -10,7 +10,8 @@ import {
   TileProp,
   TileType,
   UserData,
-  initGameInfo
+  initGameInfo,
+  AbilityType
 } from '@/lib/types';
 import React, {
   MutableRefObject,
@@ -51,6 +52,7 @@ interface GameContext {
   attackQueueRef: any; // AttackQueue
   selectedMapTileInfo: SelectedMapTileInfo;
   initGameInfo: initGameInfo | null;
+  activeAbility: AbilityType | null;
 }
 
 interface GameDispatch {
@@ -71,6 +73,7 @@ interface GameDispatch {
     React.SetStateAction<SelectedMapTileInfo>
   >;
   setInitGameInfo: React.Dispatch<any>;
+  setActiveAbility: React.Dispatch<React.SetStateAction<AbilityType | null>>;
   attackUp: (info: SelectedMapTileInfo) => void
   attackDown: (info: SelectedMapTileInfo) => void
   attackLeft: (info: SelectedMapTileInfo) => void
@@ -128,6 +131,7 @@ const GameProvider: React.FC<GameProviderProp> = ({ children }) => {
       half: false,
       unitsCount: 0,
     });
+  const [activeAbility, setActiveAbility] = useState<AbilityType | null>(null);
 
   const halfArmy = useCallback((touchHalf: MutableRefObject<boolean>) => {
     if (selectedMapTileInfo) {
@@ -262,6 +266,11 @@ const GameProvider: React.FC<GameProviderProp> = ({ children }) => {
   );
 
   const handleClick = useCallback((tile: TileProp, x: number, y: number, myPlayerIndex: number) => {
+    if (activeAbility) {
+      socketRef.current.emit('activate_ability', activeAbility, { x, y });
+      setActiveAbility(null);
+      return;
+    }
     const [tileType, color, unitsCount] = tile;
     const isOwned = color === room.players[myPlayerIndex].color;
 
@@ -316,7 +325,7 @@ const GameProvider: React.FC<GameProviderProp> = ({ children }) => {
         half: false,
       });
     }
-  }, [room.players, selectedMapTileInfo, mapQueueData, testIfNextPossibleMove, possibleNextMapPositions, handlePositionChange, setSelectedMapTileInfo, mapQueueDataDispatch]);
+  }, [selectedMapTileInfo, mapQueueData, possibleNextMapPositions, handlePositionChange, activeAbility, setSelectedMapTileInfo, mapQueueDataDispatch]);
 
   const attackUp = useCallback((selectPos?: SelectedMapTileInfo) => {
     if (selectPos) {
@@ -376,6 +385,7 @@ const GameProvider: React.FC<GameProviderProp> = ({ children }) => {
         attackQueueRef,
         selectedMapTileInfo,
         initGameInfo,
+        activeAbility
       }}
     >
       <GameDispatch.Provider
@@ -395,6 +405,7 @@ const GameProvider: React.FC<GameProviderProp> = ({ children }) => {
           snackStateDispatch,
           setSelectedMapTileInfo,
           setInitGameInfo,
+          setActiveAbility,
           attackUp,
           attackDown,
           attackLeft,

@@ -1,6 +1,6 @@
 import Block from './block';
 import MapDiff from './map-diff';
-import { UserData, TileType } from './types';
+import { UserData, TileType, AbilityState, ChallengeState } from './types';
 import { MaxTeamNum } from './constants';
 
 class Player {
@@ -20,6 +20,15 @@ class Player {
     // when player disconnect, don't delete to keep game data
     // clear disconnect player when game ended
     public disconnected: boolean = false,
+    
+    // Commander Mode State
+    public energy: number = 0,
+    public abilities: AbilityState[] = [],
+    public activeChallenge: ChallengeState | null = null,
+    
+    // Commander Effects
+    public blitzUntilTurn: number = 0,
+    public supplySurgeUntilTurn: number = 0,
   ) { }
 
   setSpectate(): void { this.team = MaxTeamNum + 1; }
@@ -43,6 +52,13 @@ class Player {
     this.land = [];
     this.king = null;
     this.patchView = null;
+    
+    // Reset Commander Mode State
+    this.energy = 0;
+    this.abilities = []; // Will be initialized by the game engine
+    this.activeChallenge = null;
+    this.blitzUntilTurn = 0;
+    this.supplySurgeUntilTurn = 0;
   }
 
   setRoomHost(value: boolean): void {
