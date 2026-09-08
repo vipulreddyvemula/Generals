@@ -33,13 +33,11 @@ export default function Game() {
         background: '#050a14',
       }}
     >
-      {/* ── Game Map area (65%) ── */}
+      {/* ── Game Map area (100%) ── */}
       <Box
         sx={{
-          position: 'relative',
-          flex: '0 0 65%',
-          maxWidth: '65%',
-          height: '100%',
+          position: 'absolute',
+          inset: 0,
           overflow: 'hidden',
         }}
       >
@@ -58,16 +56,35 @@ export default function Game() {
         <OverDialog />
       </Box>
 
-      {/* ── Commander Panel (35%) ── */}
+      {/* ── Floating Commander Panel ── */}
       <Box
         sx={{
-          flex: '0 0 35%',
-          maxWidth: '35%',
-          height: '100%',
-          overflow: 'hidden',
+          position: 'absolute',
+          right: 16,
+          top: 64, // below turns/leaderboard roughly
+          bottom: 16,
+          width: 320,
+          zIndex: 10, // above map
+          pointerEvents: 'none', // let clicks pass through where there is no UI
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center', // center vertically
         }}
       >
-        <CommanderPanel />
+        <Box sx={{
+          pointerEvents: 'auto',
+          maxHeight: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          borderRadius: 3,
+          overflow: 'hidden',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+          border: '1px solid rgba(0, 212, 255, 0.2)',
+          background: 'rgba(5, 10, 20, 0.85)',
+          backdropFilter: 'blur(12px)',
+        }}>
+          <CommanderPanel />
+        </Box>
       </Box>
     </Box>
   );

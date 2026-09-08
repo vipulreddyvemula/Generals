@@ -893,6 +893,8 @@ io.on('connection', async (socket) => {
       currPlayer.activeChallenge = challenge;
 
       // Send to client — NEVER include correctAnswer
+      // Update operatedTurn to prevent AFK surrender
+      currPlayer.operatedTurn = room.map.turn;
       socket.emit('challenge_issued', {
         id: challenge.id,
         domain: challenge.domain,
@@ -930,10 +932,12 @@ io.on('connection', async (socket) => {
         currPlayer.energy = Math.min(100, currPlayer.energy + reward);
         currPlayer.activeChallenge = null;
         currPlayer.challengeCooldownUntilTurn = room.map.turn + CHALLENGE_COOLDOWN_TURNS;
+        currPlayer.operatedTurn = room.map.turn;
         socket.emit('challenge_success', { energy: currPlayer.energy, reward });
       } else {
         currPlayer.activeChallenge = null;
         currPlayer.challengeCooldownUntilTurn = room.map.turn + CHALLENGE_COOLDOWN_TURNS;
+        currPlayer.operatedTurn = room.map.turn;
         socket.emit('challenge_failed', 'Incorrect answer.');
       }
     } catch (e) {
@@ -979,13 +983,21 @@ io.on('connection', async (socket) => {
         }
       }
 
+      // Update operatedTurn to prevent AFK surrender
+      currPlayer.operatedTurn = room.map.turn;
+
       // Apply effect (validate ownership where needed, THEN deduct energy)
       switch (abilityType) {
         case AbilityType.Scout:
-          // Reveal fog in radius — mark tiles as "scouted" for this player's view
-          // Simple approach: force a full map view update with scouted overlay
-          // (The existing fog system handles per-player views; we just confirm it worked)
           currPlayer.energy -= cost;
+          // Add scout effect to map for 10 turns (5 seconds) with radius 3
+          room.map.activeEffects.push({
+            type: 'Scout',
+            player: currPlayer,
+            center: target!,
+            radius: 3,
+            expiresAtTurn: room.map.turn + 10
+          });
           socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
           // Broadcast map update so both clients see the same game state
           io.in(room.id).emit('update_room', room);

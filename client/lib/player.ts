@@ -23,6 +23,7 @@ class Player {
     public energy: number = 0,
     public activeChallenge: ChallengeState | null = null,
     public abilities: AbilityState[] = [],
+    public challengeCooldownUntilTurn: number = 0,
   ) { }
 
   setSpectate(): void { this.team = MaxTeamNum + 1; }

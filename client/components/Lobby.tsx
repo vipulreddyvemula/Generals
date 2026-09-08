@@ -147,7 +147,7 @@ function Lobby() {
                 <ListItemText
                   id='gennia-server'
                   primary={
-                    <Typography color='primary'>{t('gserver')}</Typography>
+                    <Typography color='primary'>COMMAND CENTER UPLINK</Typography>
                   }
                   secondary={process.env.NEXT_PUBLIC_SERVER_API}
                 />
@@ -271,23 +271,6 @@ function Lobby() {
               onClick={handleCreateRoomClick}
             >
               ⚔ CREATE BATTLE
-            </Button>
-            <Button
-              variant='contained'
-              color='secondary'
-              startIcon={<MapOutlined />}
-              sx={{
-                marginTop: 2,
-                width: '100%',
-                height: '60px',
-                fontSize: '20px',
-                whiteSpace: 'nowrap',
-              }}
-              onClick={() => {
-                router.push('/mapcreator');
-              }}
-            >
-              {t('create-map')}
             </Button>
           </Box>
         </div>

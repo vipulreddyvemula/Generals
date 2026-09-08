@@ -17,8 +17,8 @@ import TimerIcon from '@mui/icons-material/Timer';
 // Animations
 // ────────────────────────────────────────────────
 const pulse = keyframes`
-  0%   { box-shadow: 0 0 0 0   rgba(0, 212, 255, 0.7); }
-  70%  { box-shadow: 0 0 0 10px rgba(0, 212, 255, 0); }
+  0%   { box-shadow: 0 0 0 0   rgba(0, 212, 255, 0.4); }
+  70%  { box-shadow: 0 0 0 6px rgba(0, 212, 255, 0); }
   100% { box-shadow: 0 0 0 0   rgba(0, 212, 255, 0); }
 `;
 
@@ -37,9 +37,9 @@ const shake = keyframes`
 `;
 
 const glow = keyframes`
-  0%   { filter: drop-shadow(0 0 5px  rgba(0, 255, 255, 0.5)); }
-  50%  { filter: drop-shadow(0 0 15px rgba(0, 255, 255, 0.9)); }
-  100% { filter: drop-shadow(0 0 5px  rgba(0, 255, 255, 0.5)); }
+  0%   { filter: drop-shadow(0 0 2px  rgba(0, 255, 255, 0.3)); }
+  50%  { filter: drop-shadow(0 0 8px rgba(0, 255, 255, 0.6)); }
+  100% { filter: drop-shadow(0 0 2px  rgba(0, 255, 255, 0.3)); }
 `;
 
 // ────────────────────────────────────────────────
@@ -76,7 +76,13 @@ export default function CommanderPanel() {
   const [answerInput, setAnswerInput]           = useState<string>('');
   const [feedback, setFeedback]                 = useState<Feedback | null>(null);
   const [feedbackAnim, setFeedbackAnim]         = useState<'success' | 'error' | null>(null);
-  const [onCooldown, setOnCooldown]             = useState(false);
+
+  // Derive cooldown from server state
+  const onCooldown = Boolean(
+    currentPlayer &&
+    room?.map &&
+    currentPlayer.challengeCooldownUntilTurn > room.map.turn
+  );
 
   // Sync energy from room state (server-authoritative fallback)
   useEffect(() => {
@@ -94,7 +100,6 @@ export default function CommanderPanel() {
       setActiveChallenge(challenge);
       setFeedback({ message: '⚡ Challenge received! Answer quickly!', type: 'info' });
       setAnswerInput('');
-      setOnCooldown(false);
     };
 
     const onChallengeSuccess = (data: { energy: number; reward: number }) => {
@@ -102,7 +107,6 @@ export default function CommanderPanel() {
       setActiveChallenge(null);
       setFeedback({ message: `✅ Correct! +${data.reward} Energy`, type: 'success' });
       setFeedbackAnim('success');
-      setOnCooldown(true);
       setTimeout(() => { setFeedback(null); setFeedbackAnim(null); }, 3500);
     };
 
@@ -110,8 +114,6 @@ export default function CommanderPanel() {
       setActiveChallenge(null);
       setFeedback({ message: `❌ ${message}`, type: 'error' });
       setFeedbackAnim('error');
-      // Show cooldown if it's a game-related failure (not a validation error)
-      if (!message.includes('already have')) setOnCooldown(true);
       setTimeout(() => { setFeedback(null); setFeedbackAnim(null); }, 4000);
     };
 
@@ -179,8 +181,7 @@ export default function CommanderPanel() {
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        background: 'linear-gradient(180deg, rgba(5,10,20,0.97) 0%, rgba(10,20,40,0.97) 100%)',
-        borderLeft: '1px solid rgba(0, 212, 255, 0.2)',
+        background: 'transparent',
         padding: 1.5,
         gap: 1.5,
         overflowY: 'auto',

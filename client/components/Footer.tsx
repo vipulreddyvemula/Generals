@@ -12,25 +12,16 @@ const FooterContainer = styled('div')`
   bottom: 0;
   left: 0;
   z-index: 80;
-  backdrop-filter: blur(3px);
-  background-color: #212936 !important;
+  padding-bottom: 8px;
 `;
 
 function Footer() {
   const { t } = useTranslation();
-  const chinaWebsite: boolean = process.env.NEXT_PUBLIC_SERVER_API.endsWith('cn');
-
   return (
     <FooterContainer>
-      <div style={{ color: 'white' }}>
-        {t('all-right-reserved')} © 2022~{new Date().getFullYear()} Gennia &nbsp;
-        {t('open-source-team')}
+      <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', letterSpacing: 1 }}>
+        COMMANDER MODE © {new Date().getFullYear()}
       </div>
-      {
-        chinaWebsite && <a style={{ color: 'skyblue' }} href='https://beian.miit.gov.cn'>
-          粤ICP备2022122081号-2
-        </a>
-      }
     </FooterContainer>
   );
 }

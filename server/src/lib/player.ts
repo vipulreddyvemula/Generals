@@ -29,6 +29,7 @@ class Player {
     // Commander Effects
     public blitzUntilTurn: number = 0,
     public supplySurgeUntilTurn: number = 0,
+    public scoutedTiles: Record<string, number> = {},
 
     // Challenge cooldown: no new challenge until turn > this value
     public challengeCooldownUntilTurn: number = 0,
@@ -63,6 +64,7 @@ class Player {
     this.blitzUntilTurn = 0;
     this.supplySurgeUntilTurn = 0;
     this.challengeCooldownUntilTurn = 0;
+    this.scoutedTiles = {};
   }
 
   setRoomHost(value: boolean): void {
