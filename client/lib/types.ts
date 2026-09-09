@@ -29,7 +29,9 @@ export enum AbilityType {
 
 export interface AbilityState {
   type: AbilityType;
-  cooldownRemaining: number;
+  cost: number;
+  cooldownTurns: number;
+  remainingCooldown: number;
 }
 
 export interface ChallengeState {

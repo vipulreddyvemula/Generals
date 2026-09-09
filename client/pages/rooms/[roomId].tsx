@@ -9,7 +9,7 @@ function RoomPage() {
   return (
     <ThemeProvider theme={theme}>
       <Head>
-        <title>Gaming Room | Gennia</title>
+        <title>Gaming Room | Commander Mode</title>
       </Head>
       <GameProvider>
         <GameRoom />

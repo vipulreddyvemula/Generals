@@ -26,9 +26,10 @@ function GameMap() {
     mapData,
     myPlayerId,
     mapQueueData,
-    selectedMapTileInfo,
     initGameInfo,
     turnsCount,
+    activeAbility,
+    selectedMapTileInfo,
   } = useGame();
 
   const { t } = useTranslation();
@@ -53,6 +54,7 @@ function GameMap() {
 
     handlePositionChange, testIfNextPossibleMove,
     handleClick,
+    setActiveAbility,
     attackUp, attackDown, attackLeft, attackRight } = useGameDispatch();
 
   const {
@@ -95,6 +97,11 @@ function GameMap() {
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
+      if (activeAbility && event.key === 'Escape') {
+        setActiveAbility(null);
+        return;
+      }
+      if (activeAbility) return;
       handleZoomOption(event.key);
       switch (event.key) {
         case 'z':
@@ -137,7 +144,7 @@ function GameMap() {
           break;
       }
     },
-    [attackDown, attackLeft, attackRight, attackUp, centerGeneral, clearQueue, halfArmy, handleZoomOption, popQueue, selectGeneral, selectedMapTileInfo, setPosition]
+    [attackDown, attackLeft, attackRight, attackUp, centerGeneral, clearQueue, halfArmy, handleZoomOption, popQueue, selectGeneral, selectedMapTileInfo, setPosition, activeAbility, setActiveAbility]
   );
 
   const myPlayerIndex = useMemo(() => {
@@ -149,7 +156,7 @@ function GameMap() {
   let displayMapData = mapData.map((tiles, x) => {
     return tiles.map((tile, y) => {
       const [, color] = tile;
-      const isOwned = color === room.players[myPlayerIndex].color;
+      const isOwned = myPlayerIndex !== -1 && room.players[myPlayerIndex] ? color === room.players[myPlayerIndex].color : false;
       const _className = queueEmpty ? '' : mapQueueData[x][y].className;
 
       let tileHalf = false;
@@ -184,6 +191,8 @@ function GameMap() {
   const handleTouchStart = useCallback(
     (event: TouchEvent) => {
       event.preventDefault();
+
+      if (activeAbility) return;
 
       if (event.touches.length === 1) {
         // touch drag or touch attack
@@ -232,12 +241,14 @@ function GameMap() {
         initialDistance.current = distance;
       }
     },
-    [mapRef, tileSize, zoom, mapData, room.players, myPlayerIndex, position.x, position.y, setSelectedMapTileInfo]
+    [mapRef, tileSize, zoom, mapData, room.players, myPlayerIndex, position.x, position.y, setSelectedMapTileInfo, activeAbility]
   );
 
   const handleTouchMove = useCallback(
     (event: TouchEvent) => {
       event.preventDefault();
+
+      if (activeAbility) return;
 
       if (event.touches.length === 1) {
         if (touchDragging.current) {
@@ -309,7 +320,7 @@ function GameMap() {
         setZoom(newZoom);
       }
     },
-    [mapRef, setPosition, tileSize, zoom, selectedMapTileInfo, mapData, handlePositionChange, setZoom]
+    [mapRef, setPosition, tileSize, zoom, selectedMapTileInfo, mapData, handlePositionChange, setZoom, activeAbility]
   );
 
   const handleTouchEnd = useCallback((event: TouchEvent) => {

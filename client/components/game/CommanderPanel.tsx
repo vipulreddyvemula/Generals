@@ -89,7 +89,15 @@ export default function CommanderPanel() {
     if (currentPlayer && currentPlayer.energy !== undefined) {
       setEnergy(currentPlayer.energy);
     }
-  }, [currentPlayer]);
+    // Also sync activeChallenge to handle game restarts and reconnects
+    if (currentPlayer) {
+      if (!currentPlayer.activeChallenge) {
+        setActiveChallenge(null);
+      } else if (currentPlayer.activeChallenge && !activeChallenge) {
+        setActiveChallenge(currentPlayer.activeChallenge);
+      }
+    }
+  }, [currentPlayer, activeChallenge]);
 
   // Socket event listeners
   useEffect(() => {

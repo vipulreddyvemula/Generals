@@ -272,7 +272,7 @@ const GameProvider: React.FC<GameProviderProp> = ({ children }) => {
       return;
     }
     const [tileType, color, unitsCount] = tile;
-    const isOwned = color === room.players[myPlayerIndex].color;
+    const isOwned = myPlayerIndex !== -1 && room.players[myPlayerIndex] ? color === room.players[myPlayerIndex].color : false;
 
     let tileHalf = false;
 

@@ -14,7 +14,8 @@ function App({ Component, pageProps }: AppProps) {
   return (
     <>
       <Head>
-        <title>Gennia</title>
+        <title>Commander Mode</title>
+        <meta name='viewport' content='initial-scale=1, width=device-width' />
       </Head>
       <Component {...pageProps} />
       <GoogleAnalytics trackPageViews />

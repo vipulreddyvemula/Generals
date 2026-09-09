@@ -8,7 +8,7 @@ function ReplayPage() {
   return (
     <ThemeProvider theme={theme}>
       <Head>
-        <title>Replay | Gennia</title>
+        <title>Replay | Commander Mode</title>
       </Head>
       <GameReplay />
     </ThemeProvider>

@@ -9,7 +9,7 @@ export default function Home() {
   return (
     <ThemeProvider theme={theme}>
       <Head>
-        <title>Map Creator | Gennia</title>
+        <title>Map Creator | Commander Mode</title>
       </Head>
       <Navbar />
       <MapEditor editMode={true} />

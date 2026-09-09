@@ -404,6 +404,17 @@ async function handleGame(room: Room, io: Server) {
       try {
         room.players.forEach((player) => {
           if (!room.map) throw new Error('king is null');
+          
+          if (player.activeChallenge && player.activeChallenge.expiresAtTurn <= room.map.turn) {
+            player.activeChallenge = null;
+            player.challengeCooldownUntilTurn = room.map.turn + 10;
+            let player_socket = io.sockets.sockets.get(player.socket_id);
+            if (player_socket) {
+              player_socket.emit('challenge_failed', 'Challenge expired!');
+            }
+            io.in(room.id).emit('update_room', room);
+          }
+
           if (!player.isDead && !player.spectating() && !player.disconnected) {
             let block = room.map.getBlock(player.king);
             let blockPlayerIndex = getPlayerIndex(room, block.player?.id);
@@ -576,6 +587,16 @@ io.on('connection', async (socket) => {
       room.players[playerIndex].socket_id = socket.id;
       io.in(room.id).emit('room_message', player.minify(), 're-joined the lobby.');
       io.in(room.id).emit('update_room', room);
+
+      if (room.gameStarted) {
+        let initGameInfo: initGameInfo = {
+          king: player.isDead ? { x: 0, y: 0 } : { x: player.king.x, y: player.king.y },
+          mapWidth: room.map.width,
+          mapHeight: room.map.height,
+        };
+        socket.emit('game_started', initGameInfo);
+        player.patchView = new MapDiff();
+      }
     }
   }
 
@@ -902,6 +923,7 @@ io.on('connection', async (socket) => {
         rewardEnergy: challenge.rewardEnergy,
         expiresAtTurn: challenge.expiresAtTurn,
       });
+      io.in(room.id).emit('update_room', room);
     } catch (e) {
       console.error('request_challenge error:', e);
     }
@@ -940,6 +962,7 @@ io.on('connection', async (socket) => {
         currPlayer.operatedTurn = room.map.turn;
         socket.emit('challenge_failed', 'Incorrect answer.');
       }
+      io.in(room.id).emit('update_room', room);
     } catch (e) {
       console.error('submit_challenge error:', e);
     }
@@ -1008,6 +1031,7 @@ io.on('connection', async (socket) => {
           currPlayer.blitzUntilTurn = room.map.turn + 10;
           currPlayer.energy -= cost;
           socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
+          io.in(room.id).emit('update_room', room);
           break;
 
         case AbilityType.Reinforce: {
@@ -1029,8 +1053,8 @@ io.on('connection', async (socket) => {
             socket.emit('ability_failed', 'You must target your own territory.');
             return;
           }
-          // Fortify: boost unit count to represent defensive reinforcement
-          block.unit = Math.floor(block.unit * 1.5) + 20;
+          // Fortify: block receives double defense modifier for ~5 seconds
+          block.fortifyUntilTurn = room.map.turn + 10;
           currPlayer.energy -= cost;
           socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
           io.in(room.id).emit('update_room', room);
@@ -1043,13 +1067,19 @@ io.on('connection', async (socket) => {
             socket.emit('ability_failed', 'Invalid target.');
             return;
           }
-          // Reduce enemy units by half (cannot target own tiles)
+          // Cannot target own tiles
           if (block.player && block.player.team === currPlayer.team) {
             socket.emit('ability_failed', 'Cannot airstrike your own territory.');
             return;
           }
-          block.unit = Math.max(0, Math.floor(block.unit * 0.5));
           currPlayer.energy -= cost;
+          room.map.activeEffects.push({
+            type: AbilityType.Airstrike,
+            player: currPlayer,
+            center: target!,
+            radius: 1, // Airstrike hits a 3x3 area (radius 1)
+            expiresAtTurn: room.map.turn + 6 // ~3 seconds delay before impact
+          });
           socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
           io.in(room.id).emit('update_room', room);
           break;
@@ -1060,6 +1090,7 @@ io.on('connection', async (socket) => {
           currPlayer.supplySurgeUntilTurn = room.map.turn + 40;
           currPlayer.energy -= cost;
           socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
+          io.in(room.id).emit('update_room', room);
           break;
       }
     } catch (e) {

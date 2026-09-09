@@ -45,8 +45,18 @@ class Player {
   }
 
   toJSON() {
-    const { land, king, patchView, ...json } = this;
-    return json;
+    const { land, king, patchView, activeChallenge, ...json } = this;
+    
+    let safeChallenge = null;
+    if (activeChallenge) {
+      const { correctAnswer, ...rest } = activeChallenge as any;
+      safeChallenge = rest;
+    }
+
+    return {
+      ...json,
+      activeChallenge: safeChallenge
+    };
   }
 
   reset(): void {

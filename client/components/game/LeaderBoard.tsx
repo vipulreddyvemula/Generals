@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTranslation } from 'next-i18next';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Player, LeaderBoardTable, UserData } from '@/lib/types';
 import { ColorArr, MaxTeamNum, WarringStates } from '@/lib/constants';
 
@@ -147,8 +147,8 @@ export default function LeaderBoard(props: LeaderBoardProps) {
           </TableHead>
           <TableBody>
             {teams.map((team, index) => (
-              <>
-                <TableRow key={team.id}>
+              <React.Fragment key={team.id}>
+                <TableRow>
                   <TableCell
                     sx={{
                       display:
@@ -273,7 +273,7 @@ export default function LeaderBoard(props: LeaderBoardProps) {
                     </TableCell>
                   </TableRow>
                 ))}
-              </>
+              </React.Fragment>
             ))}
           </TableBody>
         </Table>
