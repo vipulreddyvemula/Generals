@@ -11,6 +11,7 @@ import {
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTranslation } from 'next-i18next';
 import React, { useState, useEffect } from 'react';
+import StarIcon from '@mui/icons-material/Star';
 import { Player, LeaderBoardTable, UserData } from '@/lib/types';
 import { ColorArr, MaxTeamNum, WarringStates } from '@/lib/constants';
 
@@ -78,6 +79,8 @@ export default function LeaderBoard(props: LeaderBoardProps) {
       };
     });
 
+  const isFFA = teams.every((t: any) => t.players.length === 1);
+
   return (
     <Box>
       <TableContainer>
@@ -89,140 +92,137 @@ export default function LeaderBoard(props: LeaderBoardProps) {
             top: '0px',
             width: 'min-content',
             zIndex: '110',
-            overflow: 'hidden',
-            borderRadius: '24px 0 0 24px !important',
-            borderCollapse: 'unset', // remove border safari
+            backgroundColor: 'white',
+            borderCollapse: 'collapse',
             '& .MuiTableCell-root': {
-              transition: 'all .2s ease-in-out',
-              borderRadius: '24px !important',
-              border: 'unset !important',
-              paddingY: {
-                xs: '0rem',
-                md: '0.5rem',
-              },
-              paddingX: gameDockExpand
-                ? { xs: '0.6rem', md: '0.8rem' }
-                : { xs: '0.4rem', md: '0.6rem' },
+              border: '2px solid #222 !important',
+              paddingY: '4px',
+              paddingX: '8px',
+              color: 'black',
+              fontWeight: 'bold',
+              fontFamily: 'sans-serif',
+              fontSize: '14px',
+              lineHeight: '1.2',
             },
-            boxShadow: 1,
           }}
         >
           <TableHead>
             <TableRow
-              sx={{ backgroundColor: 'transparent', whiteSpace: 'nowrap' }}
+              sx={{ backgroundColor: 'white', whiteSpace: 'nowrap' }}
               onClick={() => {
                 setGameDockExpand(!gameDockExpand);
               }}
             >
-              <TableCell
-                align='center'
-                sx={{ display: warringStatesMode ? '' : 'none' }}
-              >
+              <TableCell align='center' sx={{ display: warringStatesMode ? '' : 'none' }}>
                 {t('country')}
               </TableCell>
-              <TableCell
-                align='center'
-                sx={{
-                  display:
-                    gameDockExpand && checkedPlayers && setCheckedPlayers
-                      ? ''
-                      : 'none',
-                }}
-              >
+              <TableCell align='center' sx={{ display: gameDockExpand && checkedPlayers && setCheckedPlayers ? '' : 'none' }}>
                 {t('view')}
               </TableCell>
-              <TableCell
-                align='center'
-                sx={{ display: gameDockExpand ? '' : 'none' }}
-              >
-                {t('player')}
+              <TableCell align='center' sx={{ minWidth: '40px' }}>
+                <StarIcon sx={{ color: '#ffd700', fontSize: '18px', verticalAlign: 'middle' }} />
               </TableCell>
-              <TableCell
-                align='center'
-                sx={{ display: gameDockExpand ? 'none' : '', padding: '1px' }}
-              ></TableCell>
-              <TableCell align='center'>{t('army')}</TableCell>
-              <TableCell align='center'>{t('land')}</TableCell>
+              <TableCell align='center' sx={{ display: gameDockExpand ? '' : 'none', minWidth: '150px' }}>
+                Player
+              </TableCell>
+              <TableCell align='center' sx={{ display: gameDockExpand ? 'none' : '', padding: '1px' }}></TableCell>
+              <TableCell align='center'>Army</TableCell>
+              <TableCell align='center'>Land</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {teams.map((team, index) => (
               <React.Fragment key={team.id}>
-                <TableRow>
-                  <TableCell
-                    sx={{
-                      display:
-                        gameDockExpand && checkedPlayers && setCheckedPlayers
-                          ? ''
-                          : 'none',
-                    }}
-                  >
-                    <Checkbox
-                      defaultChecked={false}
+                {!isFFA && (
+                  <TableRow>
+                    <TableCell
                       sx={{
-                        width: '1.5rem',
-                        height: '1.5rem',
+                        display:
+                          gameDockExpand && checkedPlayers && setCheckedPlayers
+                            ? ''
+                            : 'none',
                       }}
-                      onChange={(event: any) => {
-                        if (!checkedPlayers || !setCheckedPlayers) return;
-                        if (event.target.checked) {
-                          let newCheckedPlayers = [
-                            ...checkedPlayers,
-                            ...team.players.map((x: any) => {
-                              return {
-                                team: team.id,
-                                username: x.username,
-                                color: x.color,
-                              } as UserData;
-                            }),
-                          ];
-                          console.log(newCheckedPlayers);
-                          setCheckedPlayers(newCheckedPlayers);
-                        } else {
-                          setCheckedPlayers(
-                            checkedPlayers.filter((p) => p.team !== team.id)
-                          );
-                        }
+                    >
+                      <Checkbox
+                        defaultChecked={false}
+                        sx={{
+                          width: '1.5rem',
+                          height: '1.5rem',
+                        }}
+                        onChange={(event: any) => {
+                          if (!checkedPlayers || !setCheckedPlayers) return;
+                          if (event.target.checked) {
+                            let newCheckedPlayers = [
+                              ...checkedPlayers,
+                              ...team.players.map((x: any) => {
+                                return {
+                                  team: team.id,
+                                  username: x.username,
+                                  color: x.color,
+                                } as UserData;
+                              }),
+                            ];
+                            console.log(newCheckedPlayers);
+                            setCheckedPlayers(newCheckedPlayers);
+                          } else {
+                            setCheckedPlayers(
+                              checkedPlayers.filter((p) => p.team !== team.id)
+                            );
+                          }
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell align='center' sx={{ display: gameDockExpand ? '' : 'none', backgroundColor: '#222', color: 'white' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                        <StarIcon sx={{ color: '#ffd700', fontSize: '18px' }} />
+                        0
+                      </Box>
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        display: gameDockExpand ? '' : 'none',
+                        backgroundColor: '#555',
+                        color: 'white !important'
                       }}
-                    />
-                  </TableCell>
-                  <TableCell
-                    sx={{
-                      display: gameDockExpand ? '' : 'none',
-                    }}
-                    onClick={() => {
-                      setGameDockExpand(!gameDockExpand);
-                    }}
-                  >
-                    {'TEAM ' + team.id}
-                  </TableCell>
-                  <TableCell
-                    sx={{
-                      display: gameDockExpand ? 'none' : '',
-                    }}
-                    onClick={() => {
-                      setGameDockExpand(!gameDockExpand);
-                    }}
-                  >
-                    {'T' + team.id}
-                  </TableCell>
-                  <TableCell
-                    align='center'
-                    onClick={() => {
-                      setGameDockExpand(!gameDockExpand);
-                    }}
-                  >
-                    {team.armyCount}
-                  </TableCell>
-                  <TableCell
-                    align='center'
-                    onClick={() => {
-                      setGameDockExpand(!gameDockExpand);
-                    }}
-                  >
-                    {team.landsCount}
-                  </TableCell>
-                </TableRow>
+                      align='center'
+                      onClick={() => {
+                        setGameDockExpand(!gameDockExpand);
+                      }}
+                    >
+                      {'TEAM ' + team.id}
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        display: gameDockExpand ? 'none' : '',
+                        backgroundColor: '#555',
+                        color: 'white !important'
+                      }}
+                      onClick={() => {
+                        setGameDockExpand(!gameDockExpand);
+                      }}
+                    >
+                      {'T' + team.id}
+                    </TableCell>
+                    <TableCell
+                      align='center'
+                      sx={{ backgroundColor: 'white', color: 'black' }}
+                      onClick={() => {
+                        setGameDockExpand(!gameDockExpand);
+                      }}
+                    >
+                      {team.armyCount}
+                    </TableCell>
+                    <TableCell
+                      align='center'
+                      sx={{ backgroundColor: 'white', color: 'black' }}
+                      onClick={() => {
+                        setGameDockExpand(!gameDockExpand);
+                      }}
+                    >
+                      {team.landsCount}
+                    </TableCell>
+                  </TableRow>
+                )}
 
                 {team.players.map((player: any, j: number) => (
                   <TableRow key={index + '-' + (j + 1)}>
@@ -234,10 +234,18 @@ export default function LeaderBoard(props: LeaderBoardProps) {
                             : 'none',
                       }}
                     ></TableCell>
+                    <TableCell align='center' sx={{ display: gameDockExpand ? '' : 'none', backgroundColor: '#222', color: 'white' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                        <StarIcon sx={{ color: '#ffd700', fontSize: '18px' }} />
+                        0
+                      </Box>
+                    </TableCell>
                     <TableCell
+                      align='center'
                       sx={{
                         display: gameDockExpand ? '' : 'none',
                         backgroundColor: ColorArr[player.color],
+                        color: 'white !important',
                       }}
                       onClick={() => {
                         setGameDockExpand(!gameDockExpand);
@@ -257,6 +265,7 @@ export default function LeaderBoard(props: LeaderBoardProps) {
                     ></TableCell>
                     <TableCell
                       align='center'
+                      sx={{ backgroundColor: 'white', color: 'black' }}
                       onClick={() => {
                         setGameDockExpand(!gameDockExpand);
                       }}
@@ -265,6 +274,7 @@ export default function LeaderBoard(props: LeaderBoardProps) {
                     </TableCell>
                     <TableCell
                       align='center'
+                      sx={{ backgroundColor: 'white', color: 'black' }}
                       onClick={() => {
                         setGameDockExpand(!gameDockExpand);
                       }}
