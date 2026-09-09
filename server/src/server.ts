@@ -870,6 +870,23 @@ io.on('connection', async (socket) => {
 
           player.operatedTurn = room.map.turn;
           socket.emit('attack_success', from, to, room.map.turn);
+
+          // If Blitz is active, immediately send a game_update so the client visually SEES the rapid movement
+          if (player.blitzUntilTurn > room.map.turn && player.patchView) {
+            const leaderBoardData = room.players
+              .filter(p => !p.spectating() && !p.isDead)
+              .map(p => {
+                let data = room.map.getTotal(p);
+                return [p.color, p.team, data.army, data.land] as [number, number, number, number];
+              });
+            
+            const viewData = ((room.deathSpectator && player.isDead) || !room.fogOfWar || player.spectating())
+              ? room.map.map
+              : await room.map.getViewPlayer(player);
+              
+            await player.patchView.patch(viewData);
+            socket.emit('game_update', player.patchView.data, room.map.turn, leaderBoardData);
+          }
         } else {
           socket.emit(
             'attack_failure',

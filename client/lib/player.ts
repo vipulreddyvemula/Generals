@@ -24,6 +24,8 @@ class Player {
     public activeChallenge: ChallengeState | null = null,
     public abilities: AbilityState[] = [],
     public challengeCooldownUntilTurn: number = 0,
+    public blitzUntilTurn?: number,
+    public supplySurgeUntilTurn?: number
   ) { }
 
   setSpectate(): void { this.team = MaxTeamNum + 1; }

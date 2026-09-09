@@ -84,6 +84,11 @@ export default function CommanderPanel() {
     currentPlayer.challengeCooldownUntilTurn > room.map.turn
   );
 
+  const blitzTurnsRemaining = (currentPlayer?.blitzUntilTurn || 0) > (room?.map?.turn || 0)
+    ? currentPlayer!.blitzUntilTurn! - room!.map!.turn
+    : 0;
+  const isBlitzActive = blitzTurnsRemaining > 0;
+
   // Sync energy from room state (server-authoritative fallback)
   useEffect(() => {
     if (currentPlayer && currentPlayer.energy !== undefined) {
@@ -242,6 +247,34 @@ export default function CommanderPanel() {
           }}
         />
       </Paper>
+
+      {/* ─── ACTIVE ABILITY STATUS ─── */}
+      {isBlitzActive && (
+        <Paper
+          elevation={0}
+          sx={{
+            p: 1.5,
+            mt: 1.5,
+            background: 'rgba(244, 67, 54, 0.1)',
+            border: '1px solid rgba(244, 67, 54, 0.5)',
+            borderRadius: 2,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            animation: `${pulse} 1.5s infinite`,
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <SpeedIcon sx={{ color: '#f44336' }} />
+            <Typography sx={{ color: '#f44336', fontWeight: 700, letterSpacing: 1 }}>
+              BLITZ ACTIVE
+            </Typography>
+          </Box>
+          <Typography sx={{ color: '#fff', fontWeight: 'bold' }}>
+            {((blitzTurnsRemaining * 500) / 1000).toFixed(1)}s
+          </Typography>
+        </Paper>
+      )}
 
       {/* ─── CHALLENGE SECTION ─── */}
       <Box>
