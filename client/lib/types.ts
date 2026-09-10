@@ -47,8 +47,8 @@ export interface ChallengeState {
 export const ABILITY_COSTS: Record<AbilityType, number> = {
   [AbilityType.Scout]:       20,
   [AbilityType.Blitz]:       25,
-  [AbilityType.Reinforce]:   30,
-  [AbilityType.Fortify]:     35,
+  [AbilityType.Reinforce]:   40,
+  [AbilityType.Fortify]:     30,
   [AbilityType.Airstrike]:   60,
   [AbilityType.SupplySurge]: 80,
 };

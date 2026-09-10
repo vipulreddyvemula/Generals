@@ -48,8 +48,8 @@ const glow = keyframes`
 const ABILITIES = [
   { type: AbilityType.Scout,       icon: <RadarIcon />,         color: '#4caf50', target: true },
   { type: AbilityType.Blitz,       icon: <SpeedIcon />,         color: '#f44336', target: false },
-  { type: AbilityType.Reinforce,   icon: <UpgradeIcon />,       color: '#ff9800', target: true },
   { type: AbilityType.Fortify,     icon: <SecurityIcon />,      color: '#2196f3', target: true },
+  { type: AbilityType.Reinforce,   icon: <UpgradeIcon />,       color: '#ff9800', target: true },
   { type: AbilityType.Airstrike,   icon: <FlightTakeoffIcon />, color: '#9c27b0', target: true },
   { type: AbilityType.SupplySurge, icon: <BoltIcon />,         color: '#ffeb3b', target: false },
 ];
@@ -132,7 +132,10 @@ export default function CommanderPanel() {
 
     const onAbilityActivated = (data: { abilityType: AbilityType; energy: number }) => {
       setEnergy(data.energy);
-      setFeedback({ message: `🎯 ${data.abilityType} activated!`, type: 'success' });
+      let successMsg = `🎯 ${data.abilityType} activated!`;
+      if (data.abilityType === AbilityType.Reinforce) successMsg = `+40 TROOPS`;
+      if (data.abilityType === AbilityType.Fortify) successMsg = `DEFENSE BOOST ACTIVE`;
+      setFeedback({ message: successMsg, type: 'success' });
       setActiveAbility(null);
       setTimeout(() => setFeedback(null), 3000);
     };
@@ -405,8 +408,26 @@ export default function CommanderPanel() {
             const isAffordable = energy >= cost;
             const isActive     = activeAbility === ability.type;
 
+            let statusText = isAffordable ? ability.type : `${ability.type} (Need ${cost}E)`;
+            if (isActive) {
+              if (ability.target) statusText = 'Select friendly territory';
+            } else if (isAffordable) {
+              if (ability.type === AbilityType.Reinforce) statusText = 'Reinforce +40';
+            }
+
+            if (ability.type === AbilityType.Fortify) {
+              const myFortifies = room?.map?.activeEffects?.filter((e: any) => e.type === AbilityType.Fortify && e.player?.id === currentPlayer?.id) || [];
+              if (myFortifies.length > 0) {
+                 const latest = myFortifies.reduce((prev: any, curr: any) => prev.expiresAtTurn > curr.expiresAtTurn ? prev : curr);
+                 const turnsLeft = latest.expiresAtTurn - (room?.map?.turn || 0);
+                 if (turnsLeft > 0) {
+                   statusText = `Fortified ${(turnsLeft * 0.5).toFixed(1)}s`;
+                 }
+              }
+            }
+
             return (
-              <Tooltip key={ability.type} title={`${ability.type} (${cost}E)`} placement="top" arrow>
+              <Tooltip key={ability.type} title={statusText} placement="top" arrow>
                 <span>
                   <Box
                     onClick={() => isAffordable ? activateAbility(ability.type, ability.target) : undefined}

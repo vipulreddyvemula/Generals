@@ -28,6 +28,7 @@ interface MapTileProps {
   isSelected: boolean;
   isNextPossibleMove: boolean;
   warringStatesMode: boolean;
+  isFortified?: boolean;
 }
 
 export default React.memo(function MapTile(props: MapTileProps) {
@@ -45,6 +46,7 @@ export default React.memo(function MapTile(props: MapTileProps) {
     isSelected,
     isNextPossibleMove,
     warringStatesMode = false,
+    isFortified = false,
   } = props;
   console.log(`${x} ${y} render`, new Date().toISOString());
   const [cursorStyle, setCursorStyle] = useState('default');
@@ -222,6 +224,23 @@ export default React.memo(function MapTile(props: MapTileProps) {
             height: zoomedSize,
             backgroundColor: '#000',
             opacity: 0.5,
+          }}
+        />
+      )}
+
+      {/* Fortified Indicator */}
+      {isFortified && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: zoomedSize,
+            height: zoomedSize,
+            border: `3px solid #2196f3`,
+            boxShadow: 'inset 0 0 10px #2196f3',
+            pointerEvents: 'none',
+            zIndex: 10,
           }}
         />
       )}

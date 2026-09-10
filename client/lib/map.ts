@@ -29,6 +29,7 @@ class GameMap {
   map: Block[][];
   turn: number;
   minKingDistance: number;
+  activeEffects: any[] = [];
 
   constructor(
     public id: string,

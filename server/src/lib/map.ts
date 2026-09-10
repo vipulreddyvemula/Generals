@@ -441,7 +441,7 @@ class GameMap {
 
   moveUnit(player: any, unit: number, focus: Point, newFocus: Point): void {
     this.getBlock(focus).leaveUnit(unit);
-    this.getBlock(newFocus).enterUnit(player, unit);
+    this.getBlock(newFocus).enterUnit(player, unit, this.turn);
   }
 
   getViewPlayer(player: any): Promise<Block[][]> {

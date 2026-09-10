@@ -1057,7 +1057,7 @@ io.on('connection', async (socket) => {
             socket.emit('ability_failed', 'You must target your own territory.');
             return;
           }
-          block.unit += 50;
+          block.unit += 40;
           currPlayer.energy -= cost;
           socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
           io.in(room.id).emit('update_room', room);
@@ -1070,9 +1070,16 @@ io.on('connection', async (socket) => {
             socket.emit('ability_failed', 'You must target your own territory.');
             return;
           }
-          // Fortify: block receives double defense modifier for ~5 seconds
-          block.fortifyUntilTurn = room.map.turn + 10;
+          // Fortify: block receives double defense modifier for ~8 seconds (16 turns)
+          block.fortifyUntilTurn = room.map.turn + 16;
           currPlayer.energy -= cost;
+          room.map.activeEffects.push({
+            type: AbilityType.Fortify,
+            player: currPlayer,
+            center: target!,
+            radius: 0,
+            expiresAtTurn: room.map.turn + 16
+          });
           socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
           io.in(room.id).emit('update_room', room);
           break;

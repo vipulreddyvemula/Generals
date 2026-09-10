@@ -46,16 +46,16 @@ export interface ChallengeState {
 // Client must mirror these exactly.
 // ============================================================
 export const ABILITY_COSTS: Record<AbilityType, number> = {
-  [AbilityType.Scout]:       20,
-  [AbilityType.Blitz]:       25,
-  [AbilityType.Reinforce]:   30,
-  [AbilityType.Fortify]:     35,
-  [AbilityType.Airstrike]:   60,
+  [AbilityType.Scout]: 20,
+  [AbilityType.Blitz]: 25,
+  [AbilityType.Reinforce]: 40,
+  [AbilityType.Fortify]: 30,
+  [AbilityType.Airstrike]: 60,
   [AbilityType.SupplySurge]: 80,
 };
 
 // Cooldown in turns after a challenge (correct or incorrect)
-export const CHALLENGE_COOLDOWN_TURNS = 20;
+export const CHALLENGE_COOLDOWN_TURNS = 6;
 
 export interface initGameInfo {
   king: Position;
