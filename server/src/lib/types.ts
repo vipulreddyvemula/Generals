@@ -3,6 +3,7 @@ import Player from './player';
 import GameMap from './map';
 import MapDiff from './map-diff';
 import GameRecord from './game-record';
+import { COMMANDER_CONFIG, MathDifficulty } from './commander/config';
 
 export { Point, Player, GameMap, MapDiff };
 
@@ -29,16 +30,35 @@ export enum MathDomain {
   Sequence = 'Sequence',
   Geometry = 'Geometry',
   Probability = 'Probability',
-  Logic = 'Logic'
+  Logic = 'Logic',
 }
 
 export interface ChallengeState {
   id: string;
   domain: MathDomain;
+  difficulty: MathDifficulty;
   question: string;
   correctAnswer: string;
   rewardEnergy: number;
+  rewardTroops: number;
   expiresAtTurn: number;
+  attempted: boolean;
+}
+
+export interface CodeforcesChallengeState {
+  id: string;
+  contestId: number;
+  problemIndex: string;
+  problemName: string;
+  rating: number;
+  difficulty: 'SUPER_EASY';
+  tags?: string[];
+  rewardEnergy: number;
+  rewardTroops: number;
+  challengeIssuedAt: number;
+  expiresAt: number;
+  rewarded: boolean;
+  verificationInProgress: boolean;
 }
 
 // ============================================================
@@ -46,11 +66,11 @@ export interface ChallengeState {
 // Client must mirror these exactly.
 // ============================================================
 export const ABILITY_COSTS: Record<AbilityType, number> = {
-  [AbilityType.Scout]: 20,
+  [AbilityType.Scout]: COMMANDER_CONFIG.abilities.Scout.energy,
   [AbilityType.Blitz]: 25,
-  [AbilityType.Reinforce]: 40,
+  [AbilityType.Reinforce]: COMMANDER_CONFIG.abilities.Reinforce.energy,
   [AbilityType.Fortify]: 30,
-  [AbilityType.Airstrike]: 60,
+  [AbilityType.Airstrike]: COMMANDER_CONFIG.abilities.Airstrike.energy,
   [AbilityType.SupplySurge]: 80,
 };
 
@@ -84,7 +104,7 @@ export type LeaderBoardRow = [
   number, // color
   number, // team
   number, // armyCount
-  number, // landCount
+  number // landCount
 ];
 
 export type LeaderBoardTable = LeaderBoardRow[];
@@ -97,12 +117,7 @@ export interface UserData {
 }
 
 export class Message {
-  constructor(
-    public player: UserData | null,
-    public content: string,
-    public target?: UserData | null,
-    public turn?: number
-  ) { }
+  constructor(public player: UserData | null, public content: string, public target?: UserData | null, public turn?: number) {}
 }
 
 export class Room {
@@ -132,7 +147,7 @@ export class Room {
     public keepAlive: boolean = false, // keep alive after game over
     public revealKing: boolean = false, // reveal all king
     public warringStatesMode: boolean = false // warring states 战国 mode
-  ) { }
+  ) {}
 
   static create(options: Partial<Room>): Room {
     return new Room(
@@ -209,7 +224,7 @@ export type CustomMapTileData = [
   ColorIndex,
   number, // unitsCount which is not allow set to null
   boolean, // isAlwaysRevealed
-  number, // King Priority
+  number // King Priority
 ];
 
 export type DisplayCustomMapTileData = [
@@ -217,7 +232,7 @@ export type DisplayCustomMapTileData = [
   ColorIndex,
   DisplayUnitsCount,
   boolean, // isAlwaysRevealed : is Always Revealed
-  number, // King Priority
+  number // King Priority
 ];
 
 export interface QueueDisplayData {

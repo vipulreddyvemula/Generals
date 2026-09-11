@@ -83,32 +83,44 @@ export default function LeaderBoard(props: LeaderBoardProps) {
 
   return (
     <Box>
-      <TableContainer>
+      <TableContainer
+        sx={{
+          position: 'absolute',
+          right: 10,
+          top: 8,
+          width: 'max-content',
+          maxHeight: 138,
+          overflowY: 'auto',
+          zIndex: 110,
+          border: '1px solid rgba(105,145,180,.24)',
+          borderRadius: '8px',
+          background: 'rgba(4,10,18,.92)',
+          boxShadow: '0 8px 28px rgba(0,0,0,.45)',
+          backdropFilter: 'blur(8px)',
+        }}
+      >
         <Table
+          stickyHeader
           className='menu-container'
           sx={{
-            position: 'absolute',
-            right: '0px',
-            top: '0px',
             width: 'min-content',
-            zIndex: '110',
-            backgroundColor: 'white',
+            backgroundColor: 'transparent',
             borderCollapse: 'collapse',
             '& .MuiTableCell-root': {
-              border: '2px solid #222 !important',
-              paddingY: '4px',
-              paddingX: '8px',
-              color: 'black',
+              border: '1px solid rgba(140,170,198,.12) !important',
+              paddingY: '3px',
+              paddingX: '7px',
+              color: '#eaf2fa',
               fontWeight: 'bold',
               fontFamily: 'sans-serif',
-              fontSize: '14px',
+              fontSize: '11px',
               lineHeight: '1.2',
             },
           }}
         >
           <TableHead>
             <TableRow
-              sx={{ backgroundColor: 'white', whiteSpace: 'nowrap' }}
+              sx={{ backgroundColor: '#0b1a29', whiteSpace: 'nowrap', cursor: 'pointer' }}
               onClick={() => {
                 setGameDockExpand(!gameDockExpand);
               }}
@@ -205,7 +217,7 @@ export default function LeaderBoard(props: LeaderBoardProps) {
                     </TableCell>
                     <TableCell
                       align='center'
-                      sx={{ backgroundColor: 'white', color: 'black' }}
+                      sx={{ backgroundColor: 'rgba(10,22,35,.92)', color: '#eaf2fa' }}
                       onClick={() => {
                         setGameDockExpand(!gameDockExpand);
                       }}
@@ -214,7 +226,7 @@ export default function LeaderBoard(props: LeaderBoardProps) {
                     </TableCell>
                     <TableCell
                       align='center'
-                      sx={{ backgroundColor: 'white', color: 'black' }}
+                      sx={{ backgroundColor: 'rgba(10,22,35,.92)', color: '#eaf2fa' }}
                       onClick={() => {
                         setGameDockExpand(!gameDockExpand);
                       }}
@@ -265,7 +277,7 @@ export default function LeaderBoard(props: LeaderBoardProps) {
                     ></TableCell>
                     <TableCell
                       align='center'
-                      sx={{ backgroundColor: 'white', color: 'black' }}
+                      sx={{ backgroundColor: 'rgba(10,22,35,.92)', color: '#eaf2fa' }}
                       onClick={() => {
                         setGameDockExpand(!gameDockExpand);
                       }}
@@ -274,7 +286,7 @@ export default function LeaderBoard(props: LeaderBoardProps) {
                     </TableCell>
                     <TableCell
                       align='center'
-                      sx={{ backgroundColor: 'white', color: 'black' }}
+                      sx={{ backgroundColor: 'rgba(10,22,35,.92)', color: '#eaf2fa' }}
                       onClick={() => {
                         setGameDockExpand(!gameDockExpand);
                       }}

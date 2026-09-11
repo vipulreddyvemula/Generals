@@ -1,6 +1,6 @@
 import Block from './block';
 import MapDiff from './map-diff';
-import { UserData, TileType, AbilityState, ChallengeState } from './types';
+import { UserData, TileType, AbilityState, ChallengeState, CodeforcesChallengeState } from './types';
 import { MaxTeamNum } from './constants';
 
 class Player {
@@ -20,11 +20,18 @@ class Player {
     // when player disconnect, don't delete to keep game data
     // clear disconnect player when game ended
     public disconnected: boolean = false,
-    
+
     // Commander Mode State
     public energy: number = 0,
     public abilities: AbilityState[] = [],
     public activeChallenge: ChallengeState | null = null,
+    public activeCodeforcesChallenge: CodeforcesChallengeState | null = null,
+    public codeforcesHandle: string = '',
+    public codeforcesSolvedSet: Set<string> = new Set<string>(),
+    public codeforcesSolvedSetReady: boolean = false,
+    public rewardedCodeforcesSubmissionIds: number[] = [],
+    public lastCodeforcesChallengeAt: number = 0,
+    public lastCodeforcesVerificationAt: number = 0,
 
     // Commander Effects
     public blitzUntilTurn: number = 0,
@@ -32,21 +39,32 @@ class Player {
     public scoutedTiles: Record<string, number> = {},
 
     // Challenge cooldown: no new challenge until turn > this value
-    public challengeCooldownUntilTurn: number = 0,
-  ) { }
+    public challengeCooldownUntilTurn: number = 0
+  ) {}
 
-  setSpectate(): void { this.team = MaxTeamNum + 1; }
-  spectating(): boolean { return this.team === MaxTeamNum + 1; }
+  setSpectate(): void {
+    this.team = MaxTeamNum + 1;
+  }
+  spectating(): boolean {
+    return this.team === MaxTeamNum + 1;
+  }
 
   minify(withId?: boolean): UserData {
-    return withId
-      ? { id: this.id, username: this.username, color: this.color }
-      : { username: this.username, color: this.color };
+    return withId ? { id: this.id, username: this.username, color: this.color } : { username: this.username, color: this.color };
   }
 
   toJSON() {
-    const { land, king, patchView, activeChallenge, ...json } = this;
-    
+    const {
+      land,
+      king,
+      patchView,
+      activeChallenge,
+      codeforcesSolvedSet,
+      rewardedCodeforcesSubmissionIds,
+      lastCodeforcesVerificationAt,
+      ...json
+    } = this;
+
     let safeChallenge = null;
     if (activeChallenge) {
       const { correctAnswer, ...rest } = activeChallenge as any;
@@ -55,7 +73,7 @@ class Player {
 
     return {
       ...json,
-      activeChallenge: safeChallenge
+      activeChallenge: safeChallenge,
     };
   }
 
@@ -66,11 +84,17 @@ class Player {
     this.land = [];
     this.king = null;
     this.patchView = null;
-    
+
     // Reset Commander Mode State
     this.energy = 0;
     this.abilities = [];
     this.activeChallenge = null;
+    this.activeCodeforcesChallenge = null;
+    this.codeforcesSolvedSet = new Set<string>();
+    this.codeforcesSolvedSetReady = false;
+    this.rewardedCodeforcesSubmissionIds = [];
+    this.lastCodeforcesChallengeAt = 0;
+    this.lastCodeforcesVerificationAt = 0;
     this.blitzUntilTurn = 0;
     this.supplySurgeUntilTurn = 0;
     this.challengeCooldownUntilTurn = 0;

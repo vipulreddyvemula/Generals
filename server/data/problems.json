@@ -1,0 +1,194 @@
+[
+  {
+    "contestId": 4,
+    "problemIndex": "A",
+    "problemName": "Watermelon",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["brute force", "math"]
+  },
+  {
+    "contestId": 71,
+    "problemIndex": "A",
+    "problemName": "Way Too Long Words",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["strings"]
+  },
+  {
+    "contestId": 158,
+    "problemIndex": "A",
+    "problemName": "Next Round",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["implementation"]
+  },
+  {
+    "contestId": 50,
+    "problemIndex": "A",
+    "problemName": "Domino piling",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["greedy", "math"]
+  },
+  {
+    "contestId": 231,
+    "problemIndex": "A",
+    "problemName": "Team",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["brute force"]
+  },
+  {
+    "contestId": 282,
+    "problemIndex": "A",
+    "problemName": "Bit++",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["implementation"]
+  },
+  {
+    "contestId": 263,
+    "problemIndex": "A",
+    "problemName": "Beautiful Matrix",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["implementation"]
+  },
+  {
+    "contestId": 266,
+    "problemIndex": "A",
+    "problemName": "Stones on the Table",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["implementation"]
+  },
+  {
+    "contestId": 617,
+    "problemIndex": "A",
+    "problemName": "Elephant",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["math"]
+  },
+  {
+    "contestId": 546,
+    "problemIndex": "A",
+    "problemName": "Soldier and Bananas",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["brute force", "math"]
+  },
+  {
+    "contestId": 791,
+    "problemIndex": "A",
+    "problemName": "Bear and Big Brother",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["implementation"]
+  },
+  {
+    "contestId": 977,
+    "problemIndex": "A",
+    "problemName": "Wrong Subtraction",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["implementation"]
+  },
+  {
+    "contestId": 112,
+    "problemIndex": "A",
+    "problemName": "Petya and Strings",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["implementation", "strings"]
+  },
+  {
+    "contestId": 339,
+    "problemIndex": "A",
+    "problemName": "Helpful Maths",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["sorting", "strings"]
+  },
+  {
+    "contestId": 236,
+    "problemIndex": "A",
+    "problemName": "Boy or Girl",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["strings"]
+  },
+  {
+    "contestId": 59,
+    "problemIndex": "A",
+    "problemName": "Word",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["implementation", "strings"]
+  },
+  {
+    "contestId": 281,
+    "problemIndex": "A",
+    "problemName": "Word Capitalization",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["implementation", "strings"]
+  },
+  {
+    "contestId": 200,
+    "problemIndex": "B",
+    "problemName": "Drinks",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["implementation", "math"]
+  },
+  {
+    "contestId": 344,
+    "problemIndex": "A",
+    "problemName": "Magnets",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["implementation"]
+  },
+  {
+    "contestId": 116,
+    "problemIndex": "A",
+    "problemName": "Tram",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["implementation"]
+  },
+  {
+    "contestId": 677,
+    "problemIndex": "A",
+    "problemName": "Vanya and Fence",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["implementation"]
+  },
+  {
+    "contestId": 734,
+    "problemIndex": "A",
+    "problemName": "Anton and Danik",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["implementation", "strings"]
+  },
+  {
+    "contestId": 110,
+    "problemIndex": "A",
+    "problemName": "Nearly Lucky Number",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["implementation"]
+  },
+  {
+    "contestId": 1614,
+    "problemIndex": "A",
+    "problemName": "Divan and a Store",
+    "rating": 800,
+    "difficulty": "SUPER_EASY",
+    "tags": ["greedy", "math"]
+  }
+]

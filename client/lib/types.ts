@@ -15,16 +15,13 @@ export enum MathDomain {
   Sequence = 'Sequence',
   Geometry = 'Geometry',
   Probability = 'Probability',
-  Logic = 'Logic'
+  Logic = 'Logic',
 }
 
 export enum AbilityType {
   Scout = 'Scout',
-  Blitz = 'Blitz',
   Reinforce = 'Reinforce',
-  Fortify = 'Fortify',
   Airstrike = 'Airstrike',
-  SupplySurge = 'SupplySurge'
 }
 
 export interface AbilityState {
@@ -37,22 +34,29 @@ export interface AbilityState {
 export interface ChallengeState {
   id: string;
   domain: MathDomain;
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD' | 'EXPERT';
   question: string;
   // NOTE: correctAnswer is NEVER sent from server — it stays server-side only
   rewardEnergy: number;
+  rewardTroops: number;
   expiresAtTurn: number;
 }
 
-// Authoritative ability costs — must match server ABILITY_COSTS
-export const ABILITY_COSTS: Record<AbilityType, number> = {
-  [AbilityType.Scout]:       20,
-  [AbilityType.Blitz]:       25,
-  [AbilityType.Reinforce]:   40,
-  [AbilityType.Fortify]:     30,
-  [AbilityType.Airstrike]:   60,
-  [AbilityType.SupplySurge]: 80,
-};
-// ==========================================
+export interface CodeforcesChallengeState {
+  id: string;
+  contestId: number;
+  problemIndex: string;
+  problemName: string;
+  rating: number;
+  difficulty: 'SUPER_EASY';
+  tags?: string[];
+  rewardEnergy: number;
+  rewardTroops: number;
+  challengeIssuedAt: number;
+  expiresAt: number;
+  rewarded: boolean;
+  verificationInProgress: boolean;
+}
 
 export interface initGameInfo {
   king: Position;
@@ -99,7 +103,7 @@ export class Message {
     public content: string,
     public target?: UserData | null,
     public turn?: number
-  ) { }
+  ) {}
 }
 
 export class Room {
@@ -129,7 +133,7 @@ export class Room {
     public keepAlive: boolean = false, // keep alive after game over
     public revealKing: boolean = false, // reveal all king
     public warringStatesMode: boolean = false // warring states 战国 mode
-  ) { }
+  ) {}
 
   static create(options: Partial<Room>): Room {
     return new Room(

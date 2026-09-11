@@ -256,16 +256,6 @@ const GameProvider: React.FC<GameProviderProp> = ({ children }) => {
           y: selectPos.y,
           className: className,
         });
-        // Check if Blitz is currently active
-        const myPlayer = room.players?.find((p: any) => p.id === myPlayerId);
-        const isBlitzActive = myPlayer && (myPlayer.blitzUntilTurn || 0) > turnsCount;
-
-        if (isBlitzActive) {
-          while (!attackQueueRef.current.isEmpty()) {
-            let item = attackQueueRef.current.pop();
-            socketRef.current.emit('attack', item.from, item.to, item.half);
-          }
-        }
       } else {
         console.log("new point not within map", newPoint)
       }

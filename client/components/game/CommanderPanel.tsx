@@ -1,500 +1,897 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
-  Box, Typography, Button, TextField, LinearProgress,
-  Paper, IconButton, Tooltip, keyframes, Chip
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  LinearProgress,
+  TextField,
+  Typography,
+  keyframes,
 } from '@mui/material';
-import { useGame, useGameDispatch } from '@/context/GameContext';
-import { AbilityType, ChallengeState, ABILITY_COSTS } from '@/lib/types';
-import BoltIcon from '@mui/icons-material/Bolt';
-import SecurityIcon from '@mui/icons-material/Security';
-import SpeedIcon from '@mui/icons-material/Speed';
 import RadarIcon from '@mui/icons-material/Radar';
-import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff';
 import UpgradeIcon from '@mui/icons-material/Upgrade';
-import TimerIcon from '@mui/icons-material/Timer';
+import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import { useGame, useGameDispatch } from '@/context/GameContext';
+import {
+  AbilityType,
+  ChallengeState,
+  CodeforcesChallengeState,
+} from '@/lib/types';
 
-// ────────────────────────────────────────────────
-// Animations
-// ────────────────────────────────────────────────
-const pulse = keyframes`
-  0%   { box-shadow: 0 0 0 0   rgba(0, 212, 255, 0.4); }
-  70%  { box-shadow: 0 0 0 6px rgba(0, 212, 255, 0); }
-  100% { box-shadow: 0 0 0 0   rgba(0, 212, 255, 0); }
+const acceptedPulse = keyframes`
+  0% { box-shadow: 0 0 0 rgba(47, 230, 166, 0); }
+  35% { box-shadow: 0 0 28px rgba(47, 230, 166, .34); }
+  100% { box-shadow: 0 0 0 rgba(47, 230, 166, 0); }
 `;
 
-const successFlash = keyframes`
-  0%   { background-color: rgba(76, 175, 80, 0);   }
-  30%  { background-color: rgba(76, 175, 80, 0.35); }
-  100% { background-color: rgba(76, 175, 80, 0);   }
-`;
+const cardSx = {
+  border: '1px solid rgba(139, 164, 190, .16)',
+  background: 'rgba(8, 16, 28, .78)',
+  borderRadius: '10px',
+  p: 1.25,
+};
 
-const shake = keyframes`
-  0%, 100% { transform: translateX(0); }
-  20%       { transform: translateX(-6px); }
-  40%       { transform: translateX(6px); }
-  60%       { transform: translateX(-4px); }
-  80%       { transform: translateX(4px); }
-`;
-
-const glow = keyframes`
-  0%   { filter: drop-shadow(0 0 2px  rgba(0, 255, 255, 0.3)); }
-  50%  { filter: drop-shadow(0 0 8px rgba(0, 255, 255, 0.6)); }
-  100% { filter: drop-shadow(0 0 2px  rgba(0, 255, 255, 0.3)); }
-`;
-
-// ────────────────────────────────────────────────
-// Ability definitions (costs from shared constant)
-// ────────────────────────────────────────────────
-const ABILITIES = [
-  { type: AbilityType.Scout,       icon: <RadarIcon />,         color: '#4caf50', target: true },
-  { type: AbilityType.Blitz,       icon: <SpeedIcon />,         color: '#f44336', target: false },
-  { type: AbilityType.Fortify,     icon: <SecurityIcon />,      color: '#2196f3', target: true },
-  { type: AbilityType.Reinforce,   icon: <UpgradeIcon />,       color: '#ff9800', target: true },
-  { type: AbilityType.Airstrike,   icon: <FlightTakeoffIcon />, color: '#9c27b0', target: true },
-  { type: AbilityType.SupplySurge, icon: <BoltIcon />,         color: '#ffeb3b', target: false },
-];
-
-type FeedbackType = 'success' | 'error' | 'info' | 'warning';
-
-interface Feedback {
+type ResultBanner = {
+  source: 'MATH' | 'CODEFORCES';
+  tone: 'success' | 'error' | 'info';
+  title: string;
   message: string;
-  type: FeedbackType;
+  rewardEnergy?: number;
+  rewardTroops?: number;
+};
+
+type CfStatus =
+  | 'AVAILABLE'
+  | 'ASSIGNING'
+  | 'WAITING FOR SUBMISSION'
+  | 'VERIFYING'
+  | 'ACCEPTED'
+  | 'NOT ACCEPTED'
+  | 'EXPIRED'
+  | 'ERROR';
+
+interface CommanderPublicConfig {
+  maxEnergy: number;
+  mathRewards: Record<
+    'EASY' | 'MEDIUM' | 'HARD' | 'EXPERT',
+    { energy: number; troops: number }
+  >;
+  codeforcesReward: { energy: number; troops: number };
+  abilities: Record<
+    'Scout' | 'Reinforce' | 'Airstrike',
+    { energy: number; troops?: number }
+  >;
 }
 
-// ────────────────────────────────────────────────
+const abilities = [
+  {
+    type: AbilityType.Scout,
+    icon: <RadarIcon />,
+    accent: '#51d9ff',
+    effect: 'REVEAL AREA',
+  },
+  {
+    type: AbilityType.Reinforce,
+    icon: <UpgradeIcon />,
+    accent: '#ffbd59',
+    effect: '+40 TROOPS',
+  },
+  {
+    type: AbilityType.Airstrike,
+    icon: <FlightTakeoffIcon />,
+    accent: '#ff6b7a',
+    effect: 'AREA STRIKE',
+  },
+];
+
 export default function CommanderPanel() {
   const { socketRef, myPlayerId, activeAbility, room } = useGame();
   const { setActiveAbility } = useGameDispatch();
-
   const currentPlayer = useMemo(
-    () => room?.players?.find(p => p.id === myPlayerId),
+    () => room?.players?.find((player) => player.id === myPlayerId),
     [room, myPlayerId]
   );
+  const [energy, setEnergy] = useState(0);
+  const [mathChallenge, setMathChallenge] = useState<ChallengeState | null>(
+    null
+  );
+  const [codeforcesChallenge, setCodeforcesChallenge] =
+    useState<CodeforcesChallengeState | null>(null);
+  const [mathAnswer, setMathAnswer] = useState('');
+  const [codeforcesHandle, setCodeforcesHandle] = useState('');
+  const [cfStatus, setCfStatus] = useState<CfStatus>('AVAILABLE');
+  const [banner, setBanner] = useState<ResultBanner | null>(null);
+  const [commanderConfig, setCommanderConfig] =
+    useState<CommanderPublicConfig | null>(null);
 
-  const [energy, setEnergy]                     = useState<number>(0);
-  const [activeChallenge, setActiveChallenge]   = useState<ChallengeState | null>(null);
-  const [answerInput, setAnswerInput]           = useState<string>('');
-  const [feedback, setFeedback]                 = useState<Feedback | null>(null);
-  const [feedbackAnim, setFeedbackAnim]         = useState<'success' | 'error' | null>(null);
-
-  // Derive cooldown from server state
-  const onCooldown = Boolean(
+  const mathCooldown = Boolean(
     currentPlayer &&
-    room?.map &&
-    currentPlayer.challengeCooldownUntilTurn > room.map.turn
+      room?.map &&
+      currentPlayer.challengeCooldownUntilTurn > room.map.turn
   );
 
-  const blitzTurnsRemaining = (currentPlayer?.blitzUntilTurn || 0) > (room?.map?.turn || 0)
-    ? currentPlayer!.blitzUntilTurn! - room!.map!.turn
-    : 0;
-  const isBlitzActive = blitzTurnsRemaining > 0;
-
-  // Sync energy from room state (server-authoritative fallback)
   useEffect(() => {
-    if (currentPlayer && currentPlayer.energy !== undefined) {
-      setEnergy(currentPlayer.energy);
-    }
-    // Also sync activeChallenge to handle game restarts and reconnects
-    if (currentPlayer) {
-      if (!currentPlayer.activeChallenge) {
-        setActiveChallenge(null);
-      } else if (currentPlayer.activeChallenge && !activeChallenge) {
-        setActiveChallenge(currentPlayer.activeChallenge);
-      }
-    }
-  }, [currentPlayer, activeChallenge]);
+    if (!currentPlayer) return;
+    setEnergy(currentPlayer.energy || 0);
+    setMathChallenge(currentPlayer.activeChallenge || null);
+    if (currentPlayer.codeforcesHandle)
+      setCodeforcesHandle(
+        (current) => current || currentPlayer.codeforcesHandle
+      );
+    const activeCf = currentPlayer.activeCodeforcesChallenge || null;
+    setCodeforcesChallenge(activeCf);
+    if (activeCf?.rewarded) setCfStatus('ACCEPTED');
+    else if (activeCf)
+      setCfStatus((current) =>
+        current === 'VERIFYING' ? current : 'WAITING FOR SUBMISSION'
+      );
+  }, [currentPlayer]);
 
-  // Socket event listeners
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket) return;
 
-    const onChallengeIssued = (challenge: ChallengeState) => {
-      setActiveChallenge(challenge);
-      setFeedback({ message: '⚡ Challenge received! Answer quickly!', type: 'info' });
-      setAnswerInput('');
+    const onMathChallenge = (challenge: ChallengeState) => {
+      setMathChallenge(challenge);
+      setMathAnswer('');
+      setBanner(null);
     };
-
-    const onChallengeSuccess = (data: { energy: number; reward: number }) => {
-      setEnergy(data.energy);
-      setActiveChallenge(null);
-      setFeedback({ message: `✅ Correct! +${data.reward} Energy`, type: 'success' });
-      setFeedbackAnim('success');
-      setTimeout(() => { setFeedback(null); setFeedbackAnim(null); }, 3500);
+    const onMathResult = (result: any) => {
+      if (result.status === 'SOLVED') {
+        setEnergy(result.energy);
+        setMathChallenge(null);
+        setBanner({
+          source: 'MATH',
+          tone: 'success',
+          title: 'SOLVED',
+          message: result.message,
+          rewardEnergy: result.rewardEnergy,
+          rewardTroops: result.rewardTroops,
+        });
+      } else {
+        setMathChallenge(null);
+        setBanner({
+          source: 'MATH',
+          tone: 'error',
+          title: result.status === 'EXPIRED' ? 'EXPIRED' : 'NOT SOLVED',
+          message: result.message,
+        });
+      }
     };
-
-    const onChallengeFailed = (message: string) => {
-      setActiveChallenge(null);
-      setFeedback({ message: `❌ ${message}`, type: 'error' });
-      setFeedbackAnim('error');
-      setTimeout(() => { setFeedback(null); setFeedbackAnim(null); }, 4000);
+    const onCfPending = () => setCfStatus('ASSIGNING');
+    const onCfChallenge = (challenge: CodeforcesChallengeState) => {
+      setCodeforcesChallenge(challenge);
+      setCfStatus('WAITING FOR SUBMISSION');
+      setBanner(null);
     };
-
-    const onAbilityActivated = (data: { abilityType: AbilityType; energy: number }) => {
-      setEnergy(data.energy);
-      let successMsg = `🎯 ${data.abilityType} activated!`;
-      if (data.abilityType === AbilityType.Reinforce) successMsg = `+40 TROOPS`;
-      if (data.abilityType === AbilityType.Fortify) successMsg = `DEFENSE BOOST ACTIVE`;
-      setFeedback({ message: successMsg, type: 'success' });
+    const onVerifyPending = () => setCfStatus('VERIFYING');
+    const onVerifyResult = (result: any) => {
+      if (result.status === 'ACCEPTED') {
+        setEnergy(result.energy);
+        setCfStatus('ACCEPTED');
+        setBanner({
+          source: 'CODEFORCES',
+          tone: 'success',
+          title: 'ACCEPTED',
+          message: result.message,
+          rewardEnergy: result.rewardEnergy,
+          rewardTroops: result.rewardTroops,
+        });
+      } else if (result.status === 'EXPIRED') {
+        setCfStatus('EXPIRED');
+        setCodeforcesChallenge(null);
+        setBanner({
+          source: 'CODEFORCES',
+          tone: 'error',
+          title: 'EXPIRED',
+          message: result.message,
+        });
+      } else if (result.status === 'ERROR') {
+        setCfStatus('ERROR');
+        setBanner({
+          source: 'CODEFORCES',
+          tone: 'error',
+          title: 'VERIFICATION ERROR',
+          message: result.message,
+        });
+      } else if (result.status === 'ALREADY_REWARDED') {
+        setCfStatus('ACCEPTED');
+        setBanner({
+          source: 'CODEFORCES',
+          tone: 'info',
+          title: 'ALREADY REWARDED',
+          message: result.message,
+        });
+      } else {
+        setCfStatus('NOT ACCEPTED');
+        setBanner({
+          source: 'CODEFORCES',
+          tone: 'info',
+          title: 'NOT ACCEPTED YET',
+          message: result.message,
+        });
+      }
+    };
+    const onEnergy = ({ energy: nextEnergy }: { energy: number }) =>
+      setEnergy(nextEnergy);
+    const onConfig = (config: CommanderPublicConfig) =>
+      setCommanderConfig(config);
+    const onChallengeError = (result: {
+      source: 'MATH' | 'CODEFORCES';
+      message: string;
+    }) => {
+      if (result.source === 'CODEFORCES') {
+        setCfStatus((current) =>
+          current === 'VERIFYING'
+            ? 'WAITING FOR SUBMISSION'
+            : current === 'ASSIGNING'
+              ? 'ERROR'
+              : current
+        );
+      }
+      setBanner({
+        source: result.source,
+        tone: 'error',
+        title: 'COMMAND REJECTED',
+        message: result.message,
+      });
+    };
+    const onExpired = (result: {
+      source: 'MATH' | 'CODEFORCES';
+      message: string;
+    }) => {
+      if (result.source === 'MATH') setMathChallenge(null);
+      else {
+        setCodeforcesChallenge(null);
+        setCfStatus('EXPIRED');
+      }
+      setBanner({
+        source: result.source,
+        tone: 'error',
+        title: 'EXPIRED',
+        message: result.message,
+      });
+    };
+    const onAbilityActivated = ({
+      abilityType,
+      energy: nextEnergy,
+    }: {
+      abilityType: AbilityType;
+      energy: number;
+    }) => {
+      setEnergy(nextEnergy);
       setActiveAbility(null);
-      setTimeout(() => setFeedback(null), 3000);
+      setBanner({
+        source: 'MATH',
+        tone: 'success',
+        title: `${abilityType.toUpperCase()} DEPLOYED`,
+        message:
+          abilityType === AbilityType.Reinforce
+            ? '+40 troops delivered.'
+            : 'Commander ability confirmed.',
+      });
     };
-
     const onAbilityFailed = (message: string) => {
-      setFeedback({ message: `⚠️ ${message}`, type: 'warning' });
       setActiveAbility(null);
-      setTimeout(() => setFeedback(null), 3000);
+      setBanner({
+        source: 'MATH',
+        tone: 'error',
+        title: 'ABILITY FAILED',
+        message,
+      });
     };
 
-    socket.on('challenge_issued',   onChallengeIssued);
-    socket.on('challenge_success',  onChallengeSuccess);
-    socket.on('challenge_failed',   onChallengeFailed);
-    socket.on('ability_activated',  onAbilityActivated);
-    socket.on('ability_failed',     onAbilityFailed);
-
+    socket.on('math_challenge', onMathChallenge);
+    socket.on('math_result', onMathResult);
+    socket.on('codeforces_challenge_pending', onCfPending);
+    socket.on('codeforces_challenge', onCfChallenge);
+    socket.on('codeforces_verification_pending', onVerifyPending);
+    socket.on('codeforces_verification_result', onVerifyResult);
+    socket.on('energy_update', onEnergy);
+    socket.on('commander_config', onConfig);
+    socket.on('challenge_error', onChallengeError);
+    socket.on('challenge_expired', onExpired);
+    socket.on('ability_activated', onAbilityActivated);
+    socket.on('ability_failed', onAbilityFailed);
+    socket.emit('get_commander_config');
     return () => {
-      socket.off('challenge_issued',   onChallengeIssued);
-      socket.off('challenge_success',  onChallengeSuccess);
-      socket.off('challenge_failed',   onChallengeFailed);
-      socket.off('ability_activated',  onAbilityActivated);
-      socket.off('ability_failed',     onAbilityFailed);
+      socket.off('math_challenge', onMathChallenge);
+      socket.off('math_result', onMathResult);
+      socket.off('codeforces_challenge_pending', onCfPending);
+      socket.off('codeforces_challenge', onCfChallenge);
+      socket.off('codeforces_verification_pending', onVerifyPending);
+      socket.off('codeforces_verification_result', onVerifyResult);
+      socket.off('energy_update', onEnergy);
+      socket.off('commander_config', onConfig);
+      socket.off('challenge_error', onChallengeError);
+      socket.off('challenge_expired', onExpired);
+      socket.off('ability_activated', onAbilityActivated);
+      socket.off('ability_failed', onAbilityFailed);
     };
   }, [socketRef, setActiveAbility]);
 
-  const requestChallenge = () => {
-    if (!socketRef.current) return;
-    // No domain argument — server picks randomly (fixes bug: server ignored the arg anyway)
-    socketRef.current.emit('request_challenge');
+  const requestMath = () => socketRef.current?.emit('request_math_challenge');
+  const submitMath = (event: FormEvent) => {
+    event.preventDefault();
+    if (mathChallenge && mathAnswer.trim())
+      socketRef.current?.emit(
+        'submit_math_answer',
+        mathChallenge.id,
+        mathAnswer.trim()
+      );
+  };
+  const requestCodeforces = () => {
+    setCfStatus('ASSIGNING');
+    socketRef.current?.emit('request_codeforces_challenge', {
+      handle: codeforcesHandle.trim(),
+    });
+  };
+  const verifyCodeforces = () => {
+    if (!codeforcesChallenge) return;
+    socketRef.current?.emit('verify_codeforces_solution', {
+      contestId: codeforcesChallenge.contestId,
+      problemIndex: codeforcesChallenge.problemIndex,
+    });
+  };
+  const openCodeforces = () => {
+    if (!codeforcesChallenge) return;
+    window.open(
+      `https://codeforces.com/problemset/problem/${codeforcesChallenge.contestId}/${codeforcesChallenge.problemIndex}`,
+      '_blank',
+      'noopener,noreferrer'
+    );
+  };
+  const activateAbility = (type: AbilityType) => {
+    setActiveAbility(type);
+    setBanner({
+      source: 'MATH',
+      tone: 'info',
+      title: `${type.toUpperCase()} TARGETING`,
+      message:
+        'Select a valid tile on the battlefield. Press Escape to cancel.',
+    });
   };
 
-  const submitChallenge = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (activeChallenge && answerInput.trim() && socketRef.current) {
-      socketRef.current.emit('submit_challenge', activeChallenge.id, answerInput.trim());
-    }
-  };
-
-  const activateAbility = (type: AbilityType, requiresTarget: boolean) => {
-    if (!socketRef.current) return;
-    if (requiresTarget) {
-      setActiveAbility(type);
-      setFeedback({ message: `Click a tile to target ${type}`, type: 'info' });
-    } else {
-      socketRef.current.emit('activate_ability', type);
-    }
-  };
-
-  const feedbackColor: Record<FeedbackType, string> = {
-    success: '#4caf50',
-    error:   '#f44336',
-    info:    '#00d4ff',
-    warning: '#ff9800',
-  };
+  const toneColor =
+    banner?.tone === 'success'
+      ? '#2fe6a6'
+      : banner?.tone === 'error'
+        ? '#ff6b7a'
+        : '#51d9ff';
 
   return (
     <Box
       sx={{
+        color: '#eaf2fa',
+        fontFamily: 'Inter, system-ui, sans-serif',
+        p: 1.4,
         display: 'flex',
         flexDirection: 'column',
-        height: '100%',
-        background: 'transparent',
-        padding: 1.5,
-        gap: 1.5,
-        overflowY: 'auto',
-        animation: feedbackAnim === 'success' ? `${successFlash} 0.8s ease` : 'none',
+        gap: 1.05,
       }}
     >
-      {/* ─── HEADER ─── */}
-      <Box sx={{ textAlign: 'center', pb: 0.5, borderBottom: '1px solid rgba(0,212,255,0.15)' }}>
-        <Typography
-          variant="overline"
-          sx={{ color: '#00d4ff', letterSpacing: 3, fontSize: '0.65rem', fontWeight: 700 }}
-        >
-          COMMANDER PANEL
-        </Typography>
-      </Box>
-
-      {/* ─── ENERGY ─── */}
-      <Paper
-        elevation={0}
+      <Box
         sx={{
-          p: 1.5,
-          background: 'rgba(0,212,255,0.04)',
-          border: '1px solid rgba(0,212,255,0.15)',
-          borderRadius: 2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          px: 0.25,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.8 }}>
-          <Typography sx={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.7rem', letterSpacing: 1.5, textTransform: 'uppercase' }}>
-            Energy
+        <Box>
+          <Typography
+            sx={{
+              fontSize: 10,
+              letterSpacing: 2.4,
+              color: '#51d9ff',
+              fontWeight: 800,
+            }}
+          >
+            COMMANDER
           </Typography>
-          <Typography sx={{ color: '#00d4ff', fontWeight: 700, fontSize: '0.9rem' }}>
-            {energy} / 100
+          <Typography
+            sx={{
+              fontSize: 9,
+              color: 'rgba(220,235,249,.42)',
+              letterSpacing: 1.1,
+            }}
+          >
+            TACTICAL UPLINK // ONLINE
+          </Typography>
+        </Box>
+        <Box
+          sx={{
+            width: 7,
+            height: 7,
+            borderRadius: '50%',
+            bgcolor: '#2fe6a6',
+            boxShadow: '0 0 10px #2fe6a6',
+          }}
+        />
+      </Box>
+
+      <Box sx={{ ...cardSx, background: 'rgba(7, 22, 36, .9)' }}>
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+            mb: 0.7,
+          }}
+        >
+          <Typography
+            sx={{
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: 1.55,
+              color: 'rgba(231,242,252,.68)',
+            }}
+          >
+            COMMANDER ENERGY
+          </Typography>
+          <Typography
+            sx={{
+              fontSize: 18,
+              fontWeight: 900,
+              color: '#fff',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {energy}
+            <Box
+              component='span'
+              sx={{ fontSize: 10, color: 'rgba(231,242,252,.45)' }}
+            >
+              {' '}
+              / {commanderConfig?.maxEnergy || 100}
+            </Box>
           </Typography>
         </Box>
         <LinearProgress
-          variant="determinate"
-          value={Math.min(energy, 100)}
+          variant='determinate'
+          value={Math.min(
+            100,
+            (energy / (commanderConfig?.maxEnergy || 100)) * 100
+          )}
           sx={{
-            height: 8,
-            borderRadius: 4,
-            backgroundColor: 'rgba(255,255,255,0.08)',
+            height: 7,
+            borderRadius: 0,
+            bgcolor: 'rgba(255,255,255,.07)',
             '& .MuiLinearProgress-bar': {
-              background: energy >= 80
-                ? 'linear-gradient(90deg, #ff007a, #ff9800)'
-                : 'linear-gradient(90deg, #0055ff, #00d4ff)',
-              boxShadow: '0 0 8px rgba(0, 212, 255, 0.6)',
-              borderRadius: 4,
-              transition: 'width 0.5s ease',
-            }
+              bgcolor: energy >= 80 ? '#ffbd59' : '#38c8f4',
+              boxShadow: '0 0 12px rgba(56,200,244,.5)',
+              transition: 'transform .65s cubic-bezier(.2,.8,.2,1)',
+            },
           }}
         />
-      </Paper>
+      </Box>
 
-      {/* ─── ACTIVE ABILITY STATUS ─── */}
-      {isBlitzActive && (
-        <Paper
-          elevation={0}
+      <Typography
+        sx={{
+          fontSize: 9,
+          fontWeight: 800,
+          letterSpacing: 1.8,
+          color: 'rgba(231,242,252,.48)',
+          px: 0.25,
+        }}
+      >
+        COMMANDER CHALLENGES
+      </Typography>
+
+      <Box sx={{ ...cardSx, borderLeft: '2px solid #b788ff' }}>
+        <Box
           sx={{
-            p: 1.5,
-            mt: 1.5,
-            background: 'rgba(244, 67, 54, 0.1)',
-            border: '1px solid rgba(244, 67, 54, 0.5)',
-            borderRadius: 2,
             display: 'flex',
-            alignItems: 'center',
             justifyContent: 'space-between',
-            animation: `${pulse} 1.5s infinite`,
+            alignItems: 'center',
+            mb: 0.8,
           }}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <SpeedIcon sx={{ color: '#f44336' }} />
-            <Typography sx={{ color: '#f44336', fontWeight: 700, letterSpacing: 1 }}>
-              BLITZ ACTIVE
-            </Typography>
-          </Box>
-          <Typography sx={{ color: '#fff', fontWeight: 'bold' }}>
-            {((blitzTurnsRemaining * 500) / 1000).toFixed(1)}s
-          </Typography>
-        </Paper>
-      )}
-
-      {/* ─── CHALLENGE SECTION ─── */}
-      <Box>
-        {activeChallenge ? (
-          <Paper
-            elevation={0}
-            sx={{
-              p: 1.5,
-              background: 'rgba(0, 212, 255, 0.05)',
-              border: '1px solid rgba(0, 212, 255, 0.4)',
-              borderRadius: 2,
-            }}
+          <Typography
+            sx={{ fontSize: 11, fontWeight: 900, letterSpacing: 1.2 }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-              <Chip
-                label={activeChallenge.domain}
-                size="small"
-                sx={{
-                  background: 'rgba(0,212,255,0.15)',
-                  color: '#00d4ff',
-                  fontSize: '0.6rem',
-                  letterSpacing: 1,
-                  height: 18,
-                }}
-              />
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
-                <TimerIcon sx={{ fontSize: 13, color: '#ff9800' }} />
-                <Typography sx={{ fontSize: '0.65rem', color: '#ff9800' }}>
-                  +{activeChallenge.rewardEnergy}E on correct
-                </Typography>
-              </Box>
-            </Box>
+            🧠 MATH
+          </Typography>
+          <Chip
+            label={mathChallenge?.difficulty || 'TACTICAL'}
+            size='small'
+            sx={{
+              height: 18,
+              fontSize: 8,
+              fontWeight: 800,
+              color: '#d9c2ff',
+              bgcolor: 'rgba(183,136,255,.12)',
+              borderRadius: 1,
+            }}
+          />
+        </Box>
+        {mathChallenge ? (
+          <>
             <Typography
-              variant="body2"
-              sx={{ color: 'white', fontWeight: 600, my: 1, lineHeight: 1.4, fontSize: '0.82rem' }}
+              sx={{
+                fontSize: 13,
+                fontWeight: 700,
+                lineHeight: 1.35,
+                minHeight: 34,
+              }}
             >
-              {activeChallenge.question}
+              {mathChallenge.question}
             </Typography>
-            <form onSubmit={submitChallenge} style={{ display: 'flex', gap: 6 }}>
+            <Box sx={{ display: 'flex', gap: 1.4, my: 0.8 }}>
+              <Typography
+                sx={{ fontSize: 10, color: '#65dcff', fontWeight: 800 }}
+              >
+                +{mathChallenge.rewardEnergy} ENERGY
+              </Typography>
+              <Typography
+                sx={{ fontSize: 10, color: '#ffcb72', fontWeight: 800 }}
+              >
+                +{mathChallenge.rewardTroops} TROOPS
+              </Typography>
+            </Box>
+            <Box
+              component='form'
+              onSubmit={submitMath}
+              sx={{ display: 'flex', gap: 0.7 }}
+            >
               <TextField
-                variant="outlined"
-                size="small"
-                autoFocus
+                value={mathAnswer}
+                onChange={(event) => setMathAnswer(event.target.value)}
+                placeholder='ENTER ANSWER'
+                size='small'
                 fullWidth
-                value={answerInput}
-                onChange={e => setAnswerInput(e.target.value)}
-                placeholder="Type answer..."
+                inputProps={{ 'aria-label': 'Math challenge answer' }}
                 sx={{
-                  '& .MuiInputBase-input': { color: 'white', fontSize: '0.82rem', padding: '6px 10px' },
                   '& .MuiOutlinedInput-root': {
-                    '& fieldset': { borderColor: 'rgba(255,255,255,0.2)' },
-                    '&:hover fieldset': { borderColor: '#00d4ff' },
-                    '&.Mui-focused fieldset': { borderColor: '#00d4ff' },
+                    height: 34,
+                    color: '#fff',
+                    fontSize: 12,
+                    bgcolor: 'rgba(0,0,0,.18)',
+                    '& fieldset': { borderColor: 'rgba(183,136,255,.25)' },
                   },
                 }}
               />
               <Button
-                type="submit"
-                variant="contained"
+                type='submit'
+                disabled={!mathAnswer.trim()}
                 sx={{
-                  background: 'linear-gradient(45deg, #00d4ff, #0055ff)',
-                  color: 'white',
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  px: 1.5,
-                  minWidth: 60,
-                  '&:hover': { background: 'linear-gradient(45deg, #0055ff, #00d4ff)' }
+                  minWidth: 72,
+                  color: '#f4edff',
+                  border: '1px solid rgba(183,136,255,.45)',
+                  fontSize: 10,
+                  fontWeight: 900,
                 }}
               >
-                GO
+                SUBMIT
               </Button>
-            </form>
-          </Paper>
+            </Box>
+          </>
         ) : (
-          <Button
-            fullWidth
-            variant="contained"
-            onClick={requestChallenge}
-            disabled={onCooldown}
-            startIcon={<BoltIcon />}
+          <Box
             sx={{
-              background: onCooldown
-                ? 'rgba(100,100,100,0.3)'
-                : 'linear-gradient(45deg, #ff007a, #7a00ff)',
-              color: onCooldown ? 'rgba(255,255,255,0.4)' : 'white',
-              fontWeight: 700,
-              borderRadius: 2,
-              py: 1.2,
-              fontSize: '0.78rem',
-              letterSpacing: 1,
-              animation: !onCooldown ? `${pulse} 2s infinite` : 'none',
-              transition: 'all 0.3s ease',
-              '&:hover:not(:disabled)': { transform: 'scale(1.02)' }
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 1,
             }}
           >
-            {onCooldown ? 'RECHARGING...' : 'REQUEST CHALLENGE'}
-          </Button>
+            <Box>
+              <Typography sx={{ fontSize: 11, fontWeight: 700 }}>
+                Quick tactical problem
+              </Typography>
+              <Typography
+                sx={{ fontSize: 9, color: 'rgba(231,242,252,.48)', mt: 0.25 }}
+              >
+                Low risk ·{' '}
+                {commanderConfig
+                  ? `+${commanderConfig.mathRewards.EASY.energy}–${commanderConfig.mathRewards.EXPERT.energy} energy`
+                  : 'reward data syncing'}
+              </Typography>
+            </Box>
+            <Button
+              onClick={requestMath}
+              disabled={mathCooldown}
+              sx={{
+                color: '#d9c2ff',
+                border: '1px solid rgba(183,136,255,.36)',
+                fontSize: 9,
+                fontWeight: 900,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {mathCooldown ? 'RECHARGING' : 'SOLVE'}
+            </Button>
+          </Box>
         )}
       </Box>
 
-      {/* ─── FEEDBACK ─── */}
-      {feedback && (
-        <Typography
-          variant="caption"
+      <Box
+        sx={{
+          ...cardSx,
+          borderLeft: '2px solid #2fe6a6',
+          animation:
+            cfStatus === 'ACCEPTED' ? `${acceptedPulse} 1.2s ease-out` : 'none',
+        }}
+      >
+        <Box
           sx={{
-            textAlign: 'center',
-            color: feedbackColor[feedback.type],
-            fontWeight: 600,
-            fontSize: '0.72rem',
-            animation: feedbackAnim === 'error' ? `${shake} 0.4s ease` : 'none',
-            px: 1,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            mb: 0.8,
           }}
         >
-          {feedback.message}
-        </Typography>
-      )}
-
-      {/* ─── ABILITIES ─── */}
-      <Box>
-        <Typography
-          sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem', letterSpacing: 1.5, textTransform: 'uppercase', mb: 1 }}
-        >
-          Abilities
-        </Typography>
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0.75 }}>
-          {ABILITIES.map(ability => {
-            const cost         = ABILITY_COSTS[ability.type];
-            const isAffordable = energy >= cost;
-            const isActive     = activeAbility === ability.type;
-
-            let statusText = isAffordable ? ability.type : `${ability.type} (Need ${cost}E)`;
-            if (isActive) {
-              if (ability.target) statusText = 'Select friendly territory';
-            } else if (isAffordable) {
-              if (ability.type === AbilityType.Reinforce) statusText = 'Reinforce +40';
-            }
-
-            if (ability.type === AbilityType.Fortify) {
-              const myFortifies = room?.map?.activeEffects?.filter((e: any) => e.type === AbilityType.Fortify && e.player?.id === currentPlayer?.id) || [];
-              if (myFortifies.length > 0) {
-                 const latest = myFortifies.reduce((prev: any, curr: any) => prev.expiresAtTurn > curr.expiresAtTurn ? prev : curr);
-                 const turnsLeft = latest.expiresAtTurn - (room?.map?.turn || 0);
-                 if (turnsLeft > 0) {
-                   statusText = `Fortified ${(turnsLeft * 0.5).toFixed(1)}s`;
-                 }
-              }
-            }
-
-            return (
-              <Tooltip key={ability.type} title={statusText} placement="top" arrow>
-                <span>
-                  <Box
-                    onClick={() => isAffordable ? activateAbility(ability.type, ability.target) : undefined}
-                    sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 0.3,
-                      p: 0.8,
-                      borderRadius: 1.5,
-                      cursor: isAffordable ? 'pointer' : 'not-allowed',
-                      background: isActive
-                        ? `linear-gradient(135deg, ${ability.color}55, ${ability.color}33)`
-                        : isAffordable
-                          ? 'rgba(255,255,255,0.05)'
-                          : 'rgba(255,255,255,0.02)',
-                      border: `1px solid ${isActive ? ability.color : isAffordable ? ability.color + '55' : 'rgba(255,255,255,0.06)'}`,
-                      transition: 'all 0.2s ease',
-                      '&:hover': isAffordable ? {
-                        background: `${ability.color}22`,
-                        border: `1px solid ${ability.color}`,
-                        transform: 'translateY(-2px)',
-                      } : {},
-                    }}
-                  >
-                    <Box sx={{
-                      color: isAffordable ? 'white' : 'rgba(255,255,255,0.25)',
-                      '& svg': { fontSize: 18 },
-                      ...(isActive && { animation: `${glow} 1.5s infinite` }),
-                    }}>
-                      {ability.icon}
-                    </Box>
-                    <Typography sx={{ fontSize: '0.55rem', color: isAffordable ? ability.color : 'rgba(255,255,255,0.2)', letterSpacing: 0.5 }}>
-                      {cost}E
-                    </Typography>
-                  </Box>
-                </span>
-              </Tooltip>
-            );
-          })}
+          <Typography
+            sx={{ fontSize: 11, fontWeight: 900, letterSpacing: 1.1 }}
+          >
+            💻 CODEFORCES
+          </Typography>
+          <Chip
+            label={cfStatus}
+            size='small'
+            sx={{
+              maxWidth: 150,
+              height: 18,
+              fontSize: 7.5,
+              fontWeight: 900,
+              color: cfStatus === 'ACCEPTED' ? '#2fe6a6' : '#83e8ff',
+              bgcolor: 'rgba(47,230,166,.09)',
+              borderRadius: 1,
+            }}
+          />
         </Box>
+        {codeforcesChallenge ? (
+          <>
+            <Box sx={{ display: 'flex', gap: 0.8, alignItems: 'baseline' }}>
+              <Typography sx={{ fontSize: 17, fontWeight: 900, color: '#fff' }}>
+                {codeforcesChallenge.contestId}
+                {codeforcesChallenge.problemIndex}
+              </Typography>
+              <Typography sx={{ fontSize: 9, color: 'rgba(231,242,252,.5)' }}>
+                RATING {codeforcesChallenge.rating}
+              </Typography>
+            </Box>
+            <Typography
+              sx={{ fontSize: 12, fontWeight: 700, lineHeight: 1.3, mt: 0.2 }}
+            >
+              {codeforcesChallenge.problemName}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1.4, my: 0.8 }}>
+              <Typography
+                sx={{ fontSize: 12, color: '#2fe6a6', fontWeight: 900 }}
+              >
+                +{codeforcesChallenge.rewardEnergy} ENERGY
+              </Typography>
+              <Typography
+                sx={{ fontSize: 10, color: '#ffcb72', fontWeight: 800 }}
+              >
+                +{codeforcesChallenge.rewardTroops} TROOPS
+              </Typography>
+            </Box>
+            <Box
+              sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.7 }}
+            >
+              <Button
+                onClick={openCodeforces}
+                startIcon={
+                  <OpenInNewIcon sx={{ fontSize: '14px !important' }} />
+                }
+                sx={{
+                  color: '#83e8ff',
+                  border: '1px solid rgba(81,217,255,.32)',
+                  fontSize: 8.5,
+                  fontWeight: 900,
+                }}
+              >
+                OPEN
+              </Button>
+              <Button
+                onClick={verifyCodeforces}
+                disabled={cfStatus === 'VERIFYING' || cfStatus === 'ACCEPTED'}
+                startIcon={
+                  cfStatus === 'VERIFYING' ? (
+                    <CircularProgress size={12} color='inherit' />
+                  ) : (
+                    <CheckCircleOutlineIcon
+                      sx={{ fontSize: '14px !important' }}
+                    />
+                  )
+                }
+                sx={{
+                  color: '#5ef0b5',
+                  border: '1px solid rgba(47,230,166,.34)',
+                  fontSize: 8.5,
+                  fontWeight: 900,
+                }}
+              >
+                {cfStatus === 'VERIFYING' ? 'VERIFYING' : 'VERIFY'}
+              </Button>
+            </Box>
+          </>
+        ) : (
+          <>
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                mb: 0.7,
+              }}
+            >
+              <Typography sx={{ fontSize: 10, color: 'rgba(231,242,252,.55)' }}>
+                SUPER EASY · beginner A-level
+              </Typography>
+              <Typography
+                sx={{ fontSize: 13, color: '#2fe6a6', fontWeight: 900 }}
+              >
+                {commanderConfig
+                  ? `+${commanderConfig.codeforcesReward.energy} ENERGY`
+                  : 'HIGH REWARD'}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 0.7 }}>
+              <TextField
+                value={codeforcesHandle}
+                onChange={(event) => setCodeforcesHandle(event.target.value)}
+                placeholder='CODEFORCES HANDLE'
+                size='small'
+                fullWidth
+                inputProps={{
+                  'aria-label': 'Codeforces handle',
+                  maxLength: 24,
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    height: 34,
+                    color: '#fff',
+                    fontSize: 11,
+                    bgcolor: 'rgba(0,0,0,.18)',
+                    '& fieldset': { borderColor: 'rgba(47,230,166,.22)' },
+                  },
+                }}
+              />
+              <Button
+                onClick={requestCodeforces}
+                disabled={
+                  cfStatus === 'ASSIGNING' || codeforcesHandle.trim().length < 3
+                }
+                sx={{
+                  minWidth: 76,
+                  color: '#5ef0b5',
+                  border: '1px solid rgba(47,230,166,.34)',
+                  fontSize: 9,
+                  fontWeight: 900,
+                }}
+              >
+                {cfStatus === 'ASSIGNING' ? (
+                  <CircularProgress size={14} color='inherit' />
+                ) : (
+                  'ASSIGN'
+                )}
+              </Button>
+            </Box>
+          </>
+        )}
       </Box>
 
-      {/* ─── TARGET MODE NOTICE ─── */}
-      {activeAbility && (
-        <Paper
-          elevation={0}
+      {banner && (
+        <Box
+          role='status'
           sx={{
-            p: 1,
-            background: 'rgba(255,152,0,0.1)',
-            border: '1px solid rgba(255,152,0,0.4)',
-            borderRadius: 1.5,
-            textAlign: 'center',
+            borderLeft: `2px solid ${toneColor}`,
+            bgcolor: `${toneColor}10`,
+            px: 1,
+            py: 0.75,
+            animation:
+              banner.tone === 'success'
+                ? `${acceptedPulse} 1.1s ease-out`
+                : 'none',
           }}
         >
-          <Typography sx={{ color: '#ff9800', fontSize: '0.7rem', fontWeight: 600 }}>
-            🎯 Click a map tile to target {activeAbility}
-          </Typography>
-          <Button
-            size="small"
-            onClick={() => { setActiveAbility(null); setFeedback(null); }}
-            sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.6rem', mt: 0.3 }}
+          <Box
+            sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}
           >
-            Cancel
-          </Button>
-        </Paper>
+            <Typography
+              sx={{
+                fontSize: 10,
+                fontWeight: 900,
+                letterSpacing: 1,
+                color: toneColor,
+              }}
+            >
+              ✓ {banner.title}
+            </Typography>
+            {banner.rewardEnergy && (
+              <Typography
+                sx={{ fontSize: 11, fontWeight: 900, color: toneColor }}
+              >
+                +{banner.rewardEnergy} ENERGY
+              </Typography>
+            )}
+          </Box>
+          <Typography
+            sx={{ fontSize: 9, color: 'rgba(231,242,252,.66)', mt: 0.25 }}
+          >
+            {banner.message}
+            {banner.rewardTroops ? ` · +${banner.rewardTroops} troops` : ''}
+          </Typography>
+        </Box>
+      )}
+
+      <Typography
+        sx={{
+          fontSize: 9,
+          fontWeight: 800,
+          letterSpacing: 1.8,
+          color: 'rgba(231,242,252,.48)',
+          px: 0.25,
+        }}
+      >
+        ABILITIES
+      </Typography>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 0.7,
+        }}
+      >
+        {abilities.map((ability) => {
+          const cost = commanderConfig?.abilities[ability.type]?.energy;
+          const affordable = typeof cost === 'number' && energy >= cost;
+          const selected = activeAbility === ability.type;
+          return (
+            <Button
+              key={ability.type}
+              onClick={() => activateAbility(ability.type)}
+              disabled={!affordable}
+              aria-pressed={selected}
+              sx={{
+                minWidth: 0,
+                p: 0.75,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 0.25,
+                color: affordable ? ability.accent : 'rgba(231,242,252,.24)',
+                border: `1px solid ${selected ? ability.accent : affordable ? `${ability.accent}55` : 'rgba(255,255,255,.06)'}`,
+                bgcolor: selected ? `${ability.accent}18` : 'rgba(8,16,28,.72)',
+                '& svg': { fontSize: 18 },
+              }}
+            >
+              {ability.icon}
+              <Typography
+                sx={{ fontSize: 8, fontWeight: 900, letterSpacing: 0.5 }}
+              >
+                {ability.type.toUpperCase()}
+              </Typography>
+              <Typography sx={{ fontSize: 9, fontWeight: 900 }}>
+                {cost ?? '—'} ENERGY
+              </Typography>
+              <Typography
+                sx={{ fontSize: 6.8, color: 'inherit', opacity: 0.65 }}
+              >
+                {ability.effect}
+              </Typography>
+            </Button>
+          );
+        })}
+      </Box>
+      {activeAbility && (
+        <Button
+          onClick={() => setActiveAbility(null)}
+          sx={{
+            height: 25,
+            color: '#ffbd59',
+            border: '1px solid rgba(255,189,89,.25)',
+            fontSize: 8,
+            fontWeight: 900,
+          }}
+        >
+          CANCEL {activeAbility.toUpperCase()} TARGETING
+        </Button>
       )}
     </Box>
   );

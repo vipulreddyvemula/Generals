@@ -1,6 +1,6 @@
 import { useGame, useGameDispatch } from '@/context/GameContext';
 import useMap from '@/hooks/useMap';
-import { Position, SelectedMapTileInfo, TileProp, TileType, AbilityType } from '@/lib/types';
+import { Position, SelectedMapTileInfo, TileProp, TileType } from '@/lib/types';
 import usePossibleNextMapPositions from '@/lib/use-possible-next-map-positions';
 import { getPlayerIndex } from '@/lib/utils';
 import { ZoomInMap, ZoomOutMap } from '@mui/icons-material';
@@ -390,10 +390,6 @@ function GameMap() {
         {/* 1,0 / 1, 1 */}
         {displayMapData.map((tiles, x) => {
           return tiles.map((tile, y) => {
-            const isFortified = room?.map?.activeEffects?.some(
-              (effect: any) => effect.type === AbilityType.Fortify && effect.center.x === x && effect.center.y === y && effect.expiresAtTurn > (room?.map?.turn || 0)
-            );
-
             return (
               <div key={`${x}/${y}`}
                 onClick={() => handleClick(tile.tile, x, y, myPlayerIndex)}>
@@ -404,7 +400,7 @@ function GameMap() {
                   x={x}
                   y={y}
                   {...tile}
-                  isFortified={isFortified}
+                  isFortified={false}
                   warringStatesMode={room.warringStatesMode} />
               </div>
             );

@@ -1,6 +1,12 @@
 import Block from './block';
 import MapDiff from './map-diff';
-import { UserData, TileType, ChallengeState, AbilityState } from './types';
+import {
+  UserData,
+  TileType,
+  ChallengeState,
+  AbilityState,
+  CodeforcesChallengeState,
+} from './types';
 import { MaxTeamNum } from './constants';
 
 class Player {
@@ -22,14 +28,19 @@ class Player {
     public disconnected: boolean = false,
     public energy: number = 0,
     public activeChallenge: ChallengeState | null = null,
+    public activeCodeforcesChallenge: CodeforcesChallengeState | null = null,
+    public codeforcesHandle: string = '',
+    public codeforcesSolvedSetReady: boolean = false,
     public abilities: AbilityState[] = [],
-    public challengeCooldownUntilTurn: number = 0,
-    public blitzUntilTurn?: number,
-    public supplySurgeUntilTurn?: number
-  ) { }
+    public challengeCooldownUntilTurn: number = 0
+  ) {}
 
-  setSpectate(): void { this.team = MaxTeamNum + 1; }
-  spectating(): boolean { return this.team === MaxTeamNum + 1; }
+  setSpectate(): void {
+    this.team = MaxTeamNum + 1;
+  }
+  spectating(): boolean {
+    return this.team === MaxTeamNum + 1;
+  }
 
   minify(withId?: boolean): UserData {
     return withId

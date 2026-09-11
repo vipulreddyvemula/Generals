@@ -9,8 +9,10 @@ import { Box } from '@mui/material';
 import { useGame, useGameDispatch } from '@/context/GameContext';
 
 export default function Game() {
-  const { room, socketRef, myPlayerId, turnsCount, leaderBoardData } = useGame();
-  const { setOpenOverDialog, setDialogContent, setIsSurrendered } = useGameDispatch();
+  const { room, socketRef, myPlayerId, turnsCount, leaderBoardData } =
+    useGame();
+  const { setOpenOverDialog, setDialogContent, setIsSurrendered } =
+    useGameDispatch();
   const [isSurrenderDialogOpen, setSurrenderDialogOpen] = useState(false);
 
   const handleReturnClick = () => setSurrenderDialogOpen(true);
@@ -24,7 +26,7 @@ export default function Game() {
 
   return (
     <Box
-      className="Game"
+      className='Game'
       sx={{
         display: 'flex',
         width: '100vw',
@@ -60,29 +62,33 @@ export default function Game() {
       <Box
         sx={{
           position: 'absolute',
-          right: 16,
-          top: 64, // below turns/leaderboard roughly
-          bottom: 16,
-          width: 320,
-          zIndex: 10, // above map
-          pointerEvents: 'none', // let clicks pass through where there is no UI
+          right: { md: 12, lg: 16 },
+          top: { md: 154, lg: 164 },
+          bottom: 12,
+          width: { md: 316, lg: 332 },
+          zIndex: 109,
+          pointerEvents: 'none',
           display: 'flex',
           flexDirection: 'column',
-          justifyContent: 'center', // center vertically
+          justifyContent: 'flex-start',
         }}
       >
-        <Box sx={{
-          pointerEvents: 'auto',
-          maxHeight: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          borderRadius: 3,
-          overflow: 'hidden',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-          border: '1px solid rgba(0, 212, 255, 0.2)',
-          background: 'rgba(5, 10, 20, 0.85)',
-          backdropFilter: 'blur(12px)',
-        }}>
+        <Box
+          sx={{
+            pointerEvents: 'auto',
+            maxHeight: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            borderRadius: '12px',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            scrollbarWidth: 'thin',
+            boxShadow: '0 14px 46px rgba(0,0,0,.58)',
+            border: '1px solid rgba(105, 145, 180, .22)',
+            background: 'rgba(4, 10, 18, .92)',
+            backdropFilter: 'blur(9px)',
+          }}
+        >
           <CommanderPanel />
         </Box>
       </Box>

@@ -229,7 +229,10 @@ function GamingRoom() {
     });
 
     socket.on('room_message', (player: UserData | null, content: string) => {
-      setMessages((messages: any) => [...messages, new Message(player, content)]);
+      setMessages((messages: any) => [
+        ...messages,
+        new Message(player, content),
+      ]);
     });
     socket.on('captured', (player1: UserData, player2: UserData) => {
       setMessages((messages: any) => [
@@ -398,7 +401,14 @@ function GamingRoom() {
       )}
       {(roomUiStatus === RoomUiStatus.gameRealStarted ||
         roomUiStatus === RoomUiStatus.gameOverConfirm) && <Game />}
-      <ChatBox socket={socketRef.current} messages={messages} />
+      <ChatBox
+        socket={socketRef.current}
+        messages={messages}
+        compact={
+          roomUiStatus === RoomUiStatus.gameRealStarted ||
+          roomUiStatus === RoomUiStatus.gameOverConfirm
+        }
+      />
     </div>
   );
 }
