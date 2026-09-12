@@ -4,17 +4,15 @@ import GameMap from './map';
 import MapDiff from './map-diff';
 import GameRecord from './game-record';
 import { COMMANDER_CONFIG, MathDifficulty } from './commander/config';
+import type { CodeforcesDifficulty } from './commander/codeforces-catalogue';
 
 export { Point, Player, GameMap, MapDiff };
 
 // --- Commander Mode Types ---
 export enum AbilityType {
   Scout = 'Scout',
-  Blitz = 'Blitz',
   Reinforce = 'Reinforce',
-  Fortify = 'Fortify',
   Airstrike = 'Airstrike',
-  SupplySurge = 'SupplySurge',
 }
 
 export interface AbilityState {
@@ -51,7 +49,11 @@ export interface CodeforcesChallengeState {
   problemIndex: string;
   problemName: string;
   rating: number;
-  difficulty: 'SUPER_EASY';
+  difficulty: CodeforcesDifficulty;
+  solvedCount?: number;
+  division?: string;
+  clistBand: number;
+  clistRating?: number;
   tags?: string[];
   rewardEnergy: number;
   rewardTroops: number;
@@ -67,11 +69,8 @@ export interface CodeforcesChallengeState {
 // ============================================================
 export const ABILITY_COSTS: Record<AbilityType, number> = {
   [AbilityType.Scout]: COMMANDER_CONFIG.abilities.Scout.energy,
-  [AbilityType.Blitz]: 25,
   [AbilityType.Reinforce]: COMMANDER_CONFIG.abilities.Reinforce.energy,
-  [AbilityType.Fortify]: 30,
   [AbilityType.Airstrike]: COMMANDER_CONFIG.abilities.Airstrike.energy,
-  [AbilityType.SupplySurge]: 80,
 };
 
 // Cooldown in turns after a challenge (correct or incorrect)

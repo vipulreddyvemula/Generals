@@ -48,7 +48,11 @@ export interface CodeforcesChallengeState {
   problemIndex: string;
   problemName: string;
   rating: number;
-  difficulty: 'SUPER_EASY';
+  difficulty: 'SUPER_EASY' | 'EASY' | 'MEDIUM' | 'HARD' | 'EXPERT' | 'UNRATED';
+  solvedCount?: number;
+  division?: string;
+  clistBand: number;
+  clistRating?: number;
   tags?: string[];
   rewardEnergy: number;
   rewardTroops: number;

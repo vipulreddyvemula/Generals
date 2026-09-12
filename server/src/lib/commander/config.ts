@@ -14,6 +14,7 @@ export const COMMANDER_CONFIG = {
   },
   codeforces: {
     difficulty: 'SUPER_EASY' as const,
+    clistBand: 0,
     energyReward: 50,
     troopReward: 10,
     assignmentTtlMs: 30 * 60 * 1000,
@@ -21,8 +22,10 @@ export const COMMANDER_CONFIG = {
     verificationCooldownMs: 10 * 1000,
     clockSkewToleranceSeconds: 30,
     apiIntervalMs: 2100,
+    apiRateLimitBackoffMs: 10_000,
     apiTimeoutMs: 12_000,
     solvedHistoryCount: 5000,
+    solvedHistoryCacheMs: 60 * 60 * 1000,
     verificationSubmissionCount: 25,
     maxQueueSize: 256,
   },

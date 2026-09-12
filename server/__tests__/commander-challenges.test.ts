@@ -41,10 +41,20 @@ describe('Commander challenge authority', () => {
   });
 
   it('selects a local Super Easy problem the player has not solved', () => {
-    const solved = new Set(CODEFORCES_PROBLEMS.slice(0, -1).map(problemKey));
+    const superEasy = CODEFORCES_PROBLEMS.filter((problem) => problem.clistBand === COMMANDER_CONFIG.codeforces.clistBand);
+    const solved = new Set(superEasy.slice(0, -1).map(problemKey));
     const selected = selectCodeforcesProblem(solved);
     expect(selected.difficulty).toBe('SUPER_EASY');
-    expect(problemKey(selected)).toBe(problemKey(CODEFORCES_PROBLEMS[CODEFORCES_PROBLEMS.length - 1]));
+    expect(problemKey(selected)).toBe(problemKey(superEasy[superEasy.length - 1]));
+    expect(selected.problemName).toBeTruthy();
+    expect(selected.rating).toBe(800);
+  });
+
+  it('does not fall through to a harder CLIST band when the configured pool is exhausted', () => {
+    const solved = new Set(
+      CODEFORCES_PROBLEMS.filter((problem) => problem.clistBand === COMMANDER_CONFIG.codeforces.clistBand).map(problemKey)
+    );
+    expect(() => selectCodeforcesProblem(solved)).toThrow('No unsolved Codeforces problem');
   });
 
   it('validates Codeforces handle syntax before any API work', () => {
@@ -93,6 +103,77 @@ describe('central Codeforces API queue', () => {
     }, 20);
     await Promise.all([queue.fetchSolvedSet('one'), queue.fetchSolvedSet('two')]);
     expect(times[1] - times[0]).toBeGreaterThanOrEqual(15);
+  });
+
+  it('backs off the entire queue after a Codeforces rate-limit response', async () => {
+    const times: number[] = [];
+    let calls = 0;
+    const queue = new CodeforcesApiQueue(
+      async () => {
+        calls += 1;
+        times.push(Date.now());
+        if (calls === 1) throw new CodeforcesApiError('RATE_LIMIT');
+        return [];
+      },
+      0,
+      256,
+      20
+    );
+
+    await expect(queue.fetchSolvedSet('limited')).rejects.toMatchObject({ code: 'RATE_LIMIT' });
+    await queue.fetchSolvedSet('after-limit');
+    expect(times[1] - times[0]).toBeGreaterThanOrEqual(15);
+  });
+
+  it('deduplicates and caches solved-history requests for the same handle', async () => {
+    let calls = 0;
+    const queue = new CodeforcesApiQueue(async () => {
+      calls += 1;
+      return [
+        {
+          id: 1,
+          creationTimeSeconds: 1,
+          verdict: 'OK',
+          problem: { contestId: 71, index: 'A' },
+        },
+      ];
+    }, 0);
+
+    const [first, concurrent] = await Promise.all([queue.fetchSolvedSet('Tourist'), queue.fetchSolvedSet('tourist')]);
+    first.add('4-A');
+    const cached = await queue.fetchSolvedSet('TOURIST');
+
+    expect(calls).toBe(1);
+    expect(concurrent).toEqual(new Set(['71-A']));
+    expect(cached).toEqual(new Set(['71-A']));
+  });
+
+  it('paginates complete solved history through the same queue', async () => {
+    const pageSize = COMMANDER_CONFIG.codeforces.solvedHistoryCount;
+    const firstPage = Array.from({ length: pageSize }, (_, index) => ({
+      id: index + 1,
+      creationTimeSeconds: 1,
+      verdict: 'OK',
+      problem: { contestId: index + 1, index: 'A' },
+    }));
+    const starts: number[] = [];
+    const queue = new CodeforcesApiQueue(async (_handle, _count, from = 1) => {
+      starts.push(from);
+      return from === 1
+        ? firstPage
+        : [
+            {
+              id: pageSize + 1,
+              creationTimeSeconds: 1,
+              verdict: 'OK',
+              problem: { contestId: pageSize + 1, index: 'B' },
+            },
+          ];
+    }, 0);
+
+    const solved = await queue.fetchSolvedSet('many-submissions');
+    expect(starts).toEqual([1, pageSize + 1]);
+    expect(solved.has(`${pageSize + 1}-B`)).toBe(true);
   });
 });
 

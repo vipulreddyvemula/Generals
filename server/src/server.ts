@@ -29,7 +29,11 @@ import MapDiff from './lib/map-diff';
 import GameRecord from './lib/game-record';
 import { MathGenerator } from './lib/commander/math-generator';
 import { addCommanderEnergy, COMMANDER_CONFIG } from './lib/commander/config';
-import { isValidCodeforcesHandle, selectCodeforcesProblem } from './lib/commander/codeforces-catalogue';
+import {
+  CodeforcesCatalogueError,
+  isValidCodeforcesHandle,
+  selectCodeforcesProblem,
+} from './lib/commander/codeforces-catalogue';
 import { codeforcesApiQueue, CodeforcesApiError } from './lib/commander/cf-api-queue';
 
 dotenv.config();
@@ -885,7 +889,7 @@ io.on('connection', async (socket) => {
       let playerIndex = getPlayerIndexBySocket(room, socket.id);
       if (playerIndex !== -1) {
         let player = room.players[playerIndex];
-        const canOperate = player.operatedTurn < room.map.turn || player.blitzUntilTurn > room.map.turn;
+        const canOperate = player.operatedTurn < room.map.turn;
         if (room.map && canOperate && room.map.commendable(player, from, to)) {
           if (isHalf) {
             room.map.moveHalfMovableUnit(player, from, to);
@@ -895,30 +899,12 @@ io.on('connection', async (socket) => {
 
           player.operatedTurn = room.map.turn;
           socket.emit('attack_success', from, to, room.map.turn);
-
-          // If Blitz is active, immediately send a game_update so the client visually SEES the rapid movement
-          if (player.blitzUntilTurn > room.map.turn && player.patchView) {
-            const leaderBoardData = room.players
-              .filter((p) => !p.spectating() && !p.isDead)
-              .map((p) => {
-                let data = room.map.getTotal(p);
-                return [p.color, p.team, data.army, data.land] as [number, number, number, number];
-              });
-
-            const viewData =
-              (room.deathSpectator && player.isDead) || !room.fogOfWar || player.spectating()
-                ? room.map.map
-                : await room.map.getViewPlayer(player);
-
-            await player.patchView.patch(viewData);
-            socket.emit('game_update', player.patchView.data, room.map.turn, leaderBoardData);
-          }
         } else {
           socket.emit(
             'attack_failure',
             from,
             to,
-            `Invalid operation: ${player.operatedTurn} ${player.blitzUntilTurn} ${room.map.turn} ${room.map.commendable(
+            `Invalid operation: ${player.operatedTurn} ${room.map.turn} ${room.map.commendable(
               player,
               from,
               to
@@ -943,6 +929,8 @@ io.on('connection', async (socket) => {
       codeforcesReward: {
         energy: COMMANDER_CONFIG.codeforces.energyReward,
         troops: COMMANDER_CONFIG.codeforces.troopReward,
+        difficulty: COMMANDER_CONFIG.codeforces.difficulty,
+        clistBand: COMMANDER_CONFIG.codeforces.clistBand,
       },
       abilities: COMMANDER_CONFIG.abilities,
     });
@@ -1120,10 +1108,12 @@ io.on('connection', async (socket) => {
         ?.emit('codeforces_challenge', livePlayer.activeCodeforcesChallenge);
       io.in(liveRoom.id).emit('update_room', liveRoom);
     } catch (error) {
-      currPlayer.lastCodeforcesChallengeAt = 0;
+      if (!(error instanceof CodeforcesCatalogueError)) currPlayer.lastCodeforcesChallengeAt = 0;
       const code = error instanceof CodeforcesApiError ? error.code : 'UNAVAILABLE';
       const message =
-        code === 'INVALID_HANDLE'
+        error instanceof CodeforcesCatalogueError
+          ? 'You have already solved every available problem in this challenge band.'
+          : code === 'INVALID_HANDLE'
           ? 'Codeforces handle not found. Check the spelling and try again.'
           : 'Codeforces is temporarily unavailable. Try again shortly.';
       socket.emit('challenge_error', { source: 'CODEFORCES', message });
@@ -1131,17 +1121,27 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('verify_codeforces_solution', (payload?: { contestId?: number; problemIndex?: string }) => {
-    if (!room || !room.gameStarted || !room.map) return;
-    const currPlayer = room.players.find((p) => p.socket_id === socket.id);
-    if (!currPlayer || currPlayer.isDead || currPlayer.spectating()) return;
-    const assignment = currPlayer.activeCodeforcesChallenge;
+    if (!room || !room.gameStarted || !room.map) {
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'The match is not active.' });
+      return;
+    }
 
+    const currPlayer = room.players.find((candidate) => candidate.socket_id === socket.id);
+    if (!currPlayer || currPlayer.isDead || currPlayer.spectating()) {
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'This player cannot verify a challenge.' });
+      return;
+    }
+
+    const assignment = currPlayer.activeCodeforcesChallenge;
     if (!assignment) {
       socket.emit('challenge_error', { source: 'CODEFORCES', message: 'No active Codeforces assignment.' });
       return;
     }
     if (payload?.contestId !== assignment.contestId || payload?.problemIndex !== assignment.problemIndex) {
-      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'Verification must match the server-assigned problem.' });
+      socket.emit('challenge_error', {
+        source: 'CODEFORCES',
+        message: 'Verification must match the server-assigned problem.',
+      });
       return;
     }
     if (assignment.expiresAt <= Date.now()) {
@@ -1160,17 +1160,24 @@ io.on('connection', async (socket) => {
       socket.emit('codeforces_verification_pending', { message: 'Verification is already queued.' });
       return;
     }
-    if (Date.now() - currPlayer.lastCodeforcesVerificationAt < COMMANDER_CONFIG.codeforces.verificationCooldownMs) {
-      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'Please wait before verifying again.' });
+
+    const now = Date.now();
+    const retryAfterMs = COMMANDER_CONFIG.codeforces.verificationCooldownMs -
+      (now - currPlayer.lastCodeforcesVerificationAt);
+    if (retryAfterMs > 0) {
+      socket.emit('challenge_error', {
+        source: 'CODEFORCES',
+        message: `Please wait ${Math.ceil(retryAfterMs / 1000)} seconds before verifying again.`,
+      });
       return;
     }
-    if (!currPlayer.codeforcesHandle) {
+    if (!currPlayer.codeforcesHandle || !isValidCodeforcesHandle(currPlayer.codeforcesHandle)) {
       socket.emit('challenge_error', { source: 'CODEFORCES', message: 'A valid Codeforces handle is required.' });
       return;
     }
 
     assignment.verificationInProgress = true;
-    currPlayer.lastCodeforcesVerificationAt = Date.now();
+    currPlayer.lastCodeforcesVerificationAt = now;
     const assignmentId = assignment.id;
     const playerId = currPlayer.id;
     const roomIdForVerification = room.id;
@@ -1181,10 +1188,17 @@ io.on('connection', async (socket) => {
       .verifySubmission(handle, assignment.contestId, assignment.problemIndex, assignment.challengeIssuedAt)
       .then((result) => {
         const liveRoom = roomPool[roomIdForVerification];
-        const livePlayer = liveRoom?.players.find((p) => p.id === playerId);
+        const livePlayer = liveRoom?.players.find((candidate) => candidate.id === playerId);
         const liveAssignment = livePlayer?.activeCodeforcesChallenge;
-        if (!liveRoom?.gameStarted || !liveRoom.map || !livePlayer || !liveAssignment || liveAssignment.id !== assignmentId)
+        if (
+          !liveRoom?.gameStarted ||
+          !liveRoom.map ||
+          !livePlayer ||
+          !liveAssignment ||
+          liveAssignment.id !== assignmentId
+        )
           return;
+
         liveAssignment.verificationInProgress = false;
         const liveSocket = io.sockets.sockets.get(livePlayer.socket_id);
 
@@ -1195,7 +1209,11 @@ io.on('connection', async (socket) => {
               : result.reason === 'rejected'
               ? 'Not accepted yet. Keep solving this problem on Codeforces.'
               : 'No submission found yet. Submit on Codeforces, then verify again.';
-          liveSocket?.emit('codeforces_verification_result', { status: 'NOT_ACCEPTED', reason: result.reason, message });
+          liveSocket?.emit('codeforces_verification_result', {
+            status: 'NOT_ACCEPTED',
+            reason: result.reason,
+            message,
+          });
           return;
         }
 
@@ -1207,10 +1225,12 @@ io.on('connection', async (socket) => {
           return;
         }
 
-      liveAssignment.rewarded = true;
-      livePlayer.rewardedCodeforcesSubmissionIds.push(result.submissionId);
-      livePlayer.codeforcesSolvedSet.add(`${liveAssignment.contestId}-${liveAssignment.problemIndex}`);
-      livePlayer.energy = addCommanderEnergy(livePlayer.energy, liveAssignment.rewardEnergy);
+        liveAssignment.rewarded = true;
+        livePlayer.rewardedCodeforcesSubmissionIds.push(result.submissionId);
+        const solvedKey = `${liveAssignment.contestId}-${liveAssignment.problemIndex}`;
+        livePlayer.codeforcesSolvedSet.add(solvedKey);
+        codeforcesApiQueue.markProblemSolved(livePlayer.codeforcesHandle, solvedKey);
+        livePlayer.energy = addCommanderEnergy(livePlayer.energy, liveAssignment.rewardEnergy);
         if (livePlayer.king) liveRoom.map.getBlock(livePlayer.king).unit += liveAssignment.rewardTroops;
         livePlayer.operatedTurn = liveRoom.map.turn;
         liveSocket?.emit('codeforces_verification_result', {
@@ -1225,9 +1245,10 @@ io.on('connection', async (socket) => {
       })
       .catch((error) => {
         const liveRoom = roomPool[roomIdForVerification];
-        const livePlayer = liveRoom?.players.find((p) => p.id === playerId);
+        const livePlayer = liveRoom?.players.find((candidate) => candidate.id === playerId);
         const liveAssignment = livePlayer?.activeCodeforcesChallenge;
         if (!livePlayer || !liveAssignment || liveAssignment.id !== assignmentId) return;
+
         liveAssignment.verificationInProgress = false;
         io.sockets.sockets.get(livePlayer.socket_id)?.emit('codeforces_verification_result', {
           status: 'ERROR',
@@ -1296,14 +1317,6 @@ io.on('connection', async (socket) => {
           io.in(room.id).emit('update_room', room);
           break;
 
-        case AbilityType.Blitz:
-          // Allow unlimited movement for 5 seconds (~10 turns)
-          currPlayer.blitzUntilTurn = room.map.turn + 10;
-          currPlayer.energy -= cost;
-          socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
-          io.in(room.id).emit('update_room', room);
-          break;
-
         case AbilityType.Reinforce: {
           const block = room.map.getBlock(target!);
           if (!block || !block.player || block.player.id !== currPlayer.id) {
@@ -1312,27 +1325,6 @@ io.on('connection', async (socket) => {
           }
           block.unit += 40;
           currPlayer.energy -= cost;
-          socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
-          io.in(room.id).emit('update_room', room);
-          break;
-        }
-
-        case AbilityType.Fortify: {
-          const block = room.map.getBlock(target!);
-          if (!block || !block.player || block.player.team !== currPlayer.team) {
-            socket.emit('ability_failed', 'You must target your own territory.');
-            return;
-          }
-          // Fortify: block receives double defense modifier for ~8 seconds (16 turns)
-          block.fortifyUntilTurn = room.map.turn + 16;
-          currPlayer.energy -= cost;
-          room.map.activeEffects.push({
-            type: AbilityType.Fortify,
-            player: currPlayer,
-            center: target!,
-            radius: 0,
-            expiresAtTurn: room.map.turn + 16,
-          });
           socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
           io.in(room.id).emit('update_room', room);
           break;
@@ -1361,14 +1353,6 @@ io.on('connection', async (socket) => {
           io.in(room.id).emit('update_room', room);
           break;
         }
-
-        case AbilityType.SupplySurge:
-          // Double-speed unit generation for player for 20 seconds (~40 turns)
-          currPlayer.supplySurgeUntilTurn = room.map.turn + 40;
-          currPlayer.energy -= cost;
-          socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
-          io.in(room.id).emit('update_room', room);
-          break;
       }
     } catch (e) {
       console.error('activate_ability error:', e);

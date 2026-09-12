@@ -394,15 +394,15 @@ class GameMap {
         switch (this.map[i][j].type) {
           case TileType.Plain:
             if (this.map[i][j].player && this.turn % 50 === 0)
-              this.map[i][j].unit += (this.map[i][j].player.supplySurgeUntilTurn > this.turn) ? 2 : 1;
+              this.map[i][j].unit += 1;
             break;
           case TileType.King:
             if (this.turn % 2 === 0)
-              this.map[i][j].unit += (this.map[i][j].player.supplySurgeUntilTurn > this.turn) ? 2 : 1;
+              this.map[i][j].unit += 1;
             break;
           case TileType.City:
             if (this.map[i][j].player && this.turn % 2 === 0)
-              this.map[i][j].unit += (this.map[i][j].player.supplySurgeUntilTurn > this.turn) ? 2 : 1;
+              this.map[i][j].unit += 1;
             break;
           case TileType.Swamp:
             if (this.map[i][j].player && this.turn % 2 === 0)

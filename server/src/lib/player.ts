@@ -34,8 +34,6 @@ class Player {
     public lastCodeforcesVerificationAt: number = 0,
 
     // Commander Effects
-    public blitzUntilTurn: number = 0,
-    public supplySurgeUntilTurn: number = 0,
     public scoutedTiles: Record<string, number> = {},
 
     // Challenge cooldown: no new challenge until turn > this value
@@ -95,8 +93,6 @@ class Player {
     this.rewardedCodeforcesSubmissionIds = [];
     this.lastCodeforcesChallengeAt = 0;
     this.lastCodeforcesVerificationAt = 0;
-    this.blitzUntilTurn = 0;
-    this.supplySurgeUntilTurn = 0;
     this.challengeCooldownUntilTurn = 0;
     this.scoutedTiles = {};
   }
