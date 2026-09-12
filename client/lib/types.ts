@@ -44,6 +44,7 @@ export interface ChallengeState {
 
 export interface CodeforcesChallengeState {
   id: string;
+  queuePosition: number;
   contestId: number;
   problemIndex: string;
   problemName: string;
@@ -57,7 +58,6 @@ export interface CodeforcesChallengeState {
   rewardEnergy: number;
   rewardTroops: number;
   challengeIssuedAt: number;
-  expiresAt: number;
   rewarded: boolean;
   verificationInProgress: boolean;
 }

@@ -1,22 +1,22 @@
 import { Room, RoomPool } from './types';
 
-export const roomPool: RoomPool = {};
+export const roomPool: RoomPool = Object.create(null);
 
-const MAX_ROOM_COUNT = 15;
-var roomCount = 0;
+export const MAX_ROOM_COUNT = 15;
+let roomCount = 0;
 
 export async function createRoom(
   roomId: string = '',
   roomName: string = 'Untitled'
 ) {
   try {
-    if (Object.keys(roomPool).length > MAX_ROOM_COUNT)
+    if (Object.keys(roomPool).length >= MAX_ROOM_COUNT)
       throw new Error('Room count exceeded');
     if (!roomId) {
       ++roomCount;
       roomId = String(roomCount + 1);
     }
-    let newRoom = new Room(roomId, roomName);
+    const newRoom = new Room(roomId, roomName);
     roomPool[roomId] = newRoom;
     return {
       success: true,

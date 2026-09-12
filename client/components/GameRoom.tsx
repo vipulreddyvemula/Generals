@@ -65,9 +65,6 @@ function GamingRoom() {
       router.push('/');
     } else {
       setMyUserName(tmp);
-      const tmpId = localStorage.getItem('playerId') || '';
-      setMyPlayerId(tmpId);
-      myPlayerIdRef.current = tmpId;
     }
   }, [setMyPlayerId, setMyUserName, router]);
 
@@ -152,13 +149,32 @@ function GamingRoom() {
 
     attackQueueRef.current = new AttackQueue();
 
-    // myPlayerId could be null for first connect
+    const sessionStorageKey = `generals.player-session.${roomId}`;
+    let savedSession: { playerId: string; reconnectToken: string } | null =
+      null;
+    try {
+      const storedSession = localStorage.getItem(sessionStorageKey);
+      if (storedSession) {
+        const parsed = JSON.parse(storedSession);
+        if (
+          typeof parsed?.playerId === 'string' &&
+          typeof parsed?.reconnectToken === 'string'
+        ) {
+          savedSession = parsed;
+          setMyPlayerId(parsed.playerId);
+          myPlayerIdRef.current = parsed.playerId;
+        }
+      }
+    } catch {
+      localStorage.removeItem(sessionStorageKey);
+    }
+
     socketRef.current = io(process.env.NEXT_PUBLIC_SERVER_API, {
       query: {
         roomId: roomId,
         username: myUserName,
-        myPlayerId: myPlayerIdRef.current,
       },
+      auth: savedSession || {},
     });
     let socket = socketRef.current;
     socket.emit('get_room_info');
@@ -172,8 +188,16 @@ function GamingRoom() {
       console.log(`set_player_id: ${playerId}`);
       setMyPlayerId(playerId);
       myPlayerIdRef.current = playerId;
-      localStorage.setItem('playerId', playerId);
     });
+    socket.on(
+      'player_session',
+      (session: { playerId: string; reconnectToken: string }) => {
+        setMyPlayerId(session.playerId);
+        myPlayerIdRef.current = session.playerId;
+        socket.auth = session;
+        localStorage.setItem(sessionStorageKey, JSON.stringify(session));
+      }
+    );
     socket.on('game_started', (initGameInfo: initGameInfo) => {
       console.log('Game started:', initGameInfo);
       const audio = new Audio('/audio/fresh_snap.mp3');
@@ -317,6 +341,10 @@ function GamingRoom() {
     );
 
     socket.on('reject_join', (message: string) => {
+      if (message.startsWith('Session authentication failed')) {
+        localStorage.removeItem(sessionStorageKey);
+        socket.auth = {};
+      }
       snackStateDispatch({
         type: 'update',
         title: t('reject-join'),
@@ -352,16 +380,13 @@ function GamingRoom() {
       });
     });
 
-    socket.on('reconnect', () => {
+    socket.io.on('reconnect', () => {
       console.log('Reconnected to server.');
-      if (room.gameStarted && myPlayerIdRef.current) {
-        socket.emit('reconnect', myPlayerIdRef.current);
-      } else {
-        socket.emit('get_room_info');
-      }
+      socket.emit('get_room_info');
     });
 
     return () => {
+      socket.io.off('reconnect');
       socketRef.current.disconnect();
     };
   }, [roomId, myUserName]);

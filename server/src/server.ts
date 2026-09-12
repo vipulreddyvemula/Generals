@@ -9,7 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import { PrismaClient } from '@prisma/client';
 
-import { ColorArr, MaxTeamNum, forceStartOK } from './lib/constants';
+import { ColorArr, MaxTeamNum, ReconnectGraceMs, forceStartOK } from './lib/constants';
 import { roomPool, createRoom } from './lib/room-pool';
 import {
   Room,
@@ -20,6 +20,7 @@ import {
   LeaderBoardRow,
   AbilityType,
   ABILITY_COSTS,
+  CodeforcesChallengeState,
 } from './lib/types';
 import { getPlayerIndex, getPlayerIndexBySocket } from './lib/utils';
 import Point from './lib/point';
@@ -29,12 +30,28 @@ import MapDiff from './lib/map-diff';
 import GameRecord from './lib/game-record';
 import { MathGenerator } from './lib/commander/math-generator';
 import { addCommanderEnergy, COMMANDER_CONFIG } from './lib/commander/config';
-import {
-  CodeforcesCatalogueError,
-  isValidCodeforcesHandle,
-  selectCodeforcesProblem,
-} from './lib/commander/codeforces-catalogue';
+import { CodeforcesCatalogueError, isValidCodeforcesHandle } from './lib/commander/codeforces-catalogue';
 import { codeforcesApiQueue, CodeforcesApiError } from './lib/commander/cf-api-queue';
+import SharedCodeforcesQueue from './lib/commander/shared-codeforces-queue';
+import {
+  cancelReconnectGrace,
+  claimGameTermination,
+  cleanupFinishedRoom,
+  getGameOutcome,
+  neutralizePlayer,
+  restoreConnectedPlayer,
+  scheduleReconnectGrace,
+} from './lib/lifecycle';
+import {
+  applyRoomSetting,
+  authorizeRoomSettingForSocket,
+  changeTeamForSocket,
+  isOrthogonalMove,
+  MAX_SUPPORTED_PLAYERS,
+  resolveSocketPlayer,
+  surrenderForSocket,
+} from './lib/security';
+import { authorizeReconnect, createReconnectCredential } from './lib/session';
 
 dotenv.config();
 
@@ -59,7 +76,7 @@ app.get('/get_rooms', (req: Request, res: Response) => {
 });
 
 app.get('/create_room', async (req: Request, res: Response) => {
-  let result = await createRoom();
+  const result = await createRoom();
   if (result.success) {
     res.status(200).json(result);
   } else {
@@ -301,42 +318,143 @@ const io = new Server(server, {
   },
 });
 
-function handleNeutralized(room: Room, player: Player) {
-  if (player.king) {
-    room.map.getBlock(player.king).kingBeDominated();
-  } else {
-    console.log('Error! king is null', player);
-  }
-  // 变成中立单元: todo 延迟一段时间再变为中立单元更合理
-  player.land.forEach((block) => {
-    block.beNeutralized();
-  });
-  player.land.length = 0;
-  player.king = null;
-  player.isDead = true;
+function getCodeforcesEligiblePlayers(room: Room): Player[] {
+  return room.players.filter((candidate) => !candidate.isDead && !candidate.disconnected && !candidate.spectating());
 }
 
-async function handleDisconnectInRoom(room: Room, player: Player, io: Server) {
-  try {
-    io.in(room.id).emit('room_message', player, 'quit.');
-    if (room.gameStarted && !player.spectating()) {
-      player.disconnected = true;
-      handleNeutralized(room, player);
-    } else {
-      room.players = room.players.filter((p) => p.id != player.id);
-    }
+function emitCodeforcesQueueStatus(room: Room, io: Server): void {
+  const eligiblePlayers = getCodeforcesEligiblePlayers(room);
+  const readyPlayerIds = eligiblePlayers
+    .filter((candidate) => candidate.codeforcesSolvedSetReady)
+    .map((candidate) => candidate.id);
+  io.in(room.id).emit('codeforces_queue_status', {
+    readyPlayers: readyPlayerIds.length,
+    totalPlayers: eligiblePlayers.length,
+    readyPlayerIds,
+    initialized: room.codeforcesQueue !== null,
+  });
+}
 
-    room.forceStartNum = 0;
-    for (let i = 0, c = 0; i < room.players.length; ++i) {
-      if (room.players[i].forceStart) {
-        ++room.forceStartNum;
+function createCodeforcesAssignment(room: Room, player: Player, queuePosition: number): CodeforcesChallengeState | null {
+  const queue = room.codeforcesQueue;
+  if (!queue || !queue.hasPlayer(player.id)) return null;
+
+  try {
+    const problem = queue.getOrCreateProblem(queuePosition);
+    const assignment: CodeforcesChallengeState = {
+      id: crypto.randomUUID(),
+      queuePosition,
+      ...problem,
+      rewardEnergy: COMMANDER_CONFIG.codeforces.energyReward,
+      rewardTroops: COMMANDER_CONFIG.codeforces.troopReward,
+      challengeIssuedAt: Date.now(),
+      rewarded: false,
+      verificationInProgress: false,
+    };
+    player.activeCodeforcesChallenge = assignment;
+    return assignment;
+  } catch (error) {
+    player.activeCodeforcesChallenge = null;
+    const message =
+      error instanceof CodeforcesCatalogueError
+        ? 'No more shared Codeforces problems are available in this challenge band.'
+        : 'Unable to prepare the next shared Codeforces problem.';
+    io.sockets.sockets.get(player.socket_id)?.emit('codeforces_queue_exhausted', { message });
+    return null;
+  }
+}
+
+function emitCodeforcesAssignment(player: Player, assignment: CodeforcesChallengeState | null): void {
+  if (assignment) io.sockets.sockets.get(player.socket_id)?.emit('codeforces_challenge', assignment);
+}
+
+function tryInitializeCodeforcesQueue(room: Room, io: Server): void {
+  if (room.codeforcesQueue) return;
+  const eligiblePlayers = getCodeforcesEligiblePlayers(room);
+  emitCodeforcesQueueStatus(room, io);
+  if (eligiblePlayers.length === 0 || eligiblePlayers.some((candidate) => !candidate.codeforcesSolvedSetReady)) return;
+
+  room.codeforcesQueue = new SharedCodeforcesQueue(
+    eligiblePlayers.map((candidate) => candidate.id),
+    eligiblePlayers.map((candidate) => candidate.codeforcesSolvedSet)
+  );
+
+  for (const eligiblePlayer of eligiblePlayers) {
+    emitCodeforcesAssignment(eligiblePlayer, createCodeforcesAssignment(room, eligiblePlayer, 0));
+  }
+  emitCodeforcesQueueStatus(room, io);
+  io.in(room.id).emit('update_room', room);
+}
+
+function issuePlayerSession(player: Player, socket: Socket): void {
+  const credential = createReconnectCredential();
+  player.sessionTokenHash = credential.tokenHash;
+  socket.emit('player_session', { playerId: player.id, reconnectToken: credential.token });
+  socket.emit('set_player_id', player.id);
+}
+
+function finishGame(room: Room, io: Server, gameRecord: GameRecord): boolean {
+  if (!claimGameTermination(room)) return false;
+
+  const outcome = getGameOutcome(room);
+  const winners =
+    outcome.winnerTeam === null
+      ? []
+      : room.players.filter((player) => player.team === outcome.winnerTeam).map((player) => player.minify(true));
+  let replayLink = '';
+  try {
+    replayLink = gameRecord.outPutToJSON(process.cwd());
+  } catch (error) {
+    console.error('Failed to write game replay:', error);
+  }
+
+  io.in(room.id).emit('game_ended', winners, replayLink);
+  cleanupFinishedRoom(room);
+  io.in(room.id).emit('update_room', room);
+  if (room.players.length === 0 && !room.keepAlive) delete roomPool[room.id];
+  return true;
+}
+
+function handleDisconnectInRoom(room: Room, player: Player, socketId: string, io: Server): void {
+  try {
+    if (player.socket_id !== socketId) return;
+
+    if (room.gameStarted && !player.spectating()) {
+      player.socket_id = '';
+      scheduleReconnectGrace(
+        player,
+        () => {
+          const liveRoom = roomPool[room.id];
+          const livePlayer = liveRoom?.players.find((candidate) => candidate.id === player.id);
+          if (!liveRoom || !livePlayer || !livePlayer.disconnected) return;
+
+          livePlayer.sessionTokenHash = '';
+          if (liveRoom.gameStarted) {
+            neutralizePlayer(liveRoom, livePlayer);
+            io.in(liveRoom.id).emit('room_message', livePlayer.minify(), 'failed to reconnect and was eliminated.');
+            if (!liveRoom.codeforcesQueue) tryInitializeCodeforcesQueue(liveRoom, io);
+            const outcome = getGameOutcome(liveRoom);
+            if (outcome.terminal && liveRoom.gameRecord) {
+              finishGame(liveRoom, io, liveRoom.gameRecord);
+            } else {
+              io.in(liveRoom.id).emit('update_room', liveRoom);
+            }
+          }
+        },
+        ReconnectGraceMs
+      );
+      io.in(room.id).emit('room_message', player.minify(), `disconnected; ${ReconnectGraceMs / 1000}s to reconnect.`);
+    } else {
+      cancelReconnectGrace(player);
+      room.players = room.players.filter((p) => p.id != player.id);
+      room.forceStartNum = room.players.filter((candidate) => candidate.forceStart).length;
+      if (room.players.length < 1 && !room.keepAlive) {
+        delete roomPool[room.id];
+      } else if (room.players[0] && !room.players.some((candidate) => candidate.isRoomHost)) {
+        room.players[0].setRoomHost(true);
       }
     }
-    if (room.players.length < 1 && !room.keepAlive) {
-      delete roomPool[room.id];
-    } else {
-      if (room.players[0]) room.players[0].setRoomHost(true);
-    }
+    if (room.gameStarted && !room.codeforcesQueue) tryInitializeCodeforcesQueue(room, io);
     io.in(room.id).emit('update_room', room);
   } catch (e: any) {
     console.error(JSON.stringify(e, ['message', 'arguments', 'type', 'name']));
@@ -345,7 +463,7 @@ async function handleDisconnectInRoom(room: Room, player: Player, io: Server) {
 }
 
 async function checkForcedStart(room: Room, io: Server) {
-  let forceStartNum = forceStartOK[room.players.filter((player) => !player.spectating()).length];
+  const forceStartNum = forceStartOK[room.players.filter((player) => !player.spectating()).length];
 
   if (!room.gameStarted && room.forceStartNum >= forceStartNum) {
     await handleGame(room, io);
@@ -354,6 +472,7 @@ async function checkForcedStart(room: Room, io: Server) {
 
 async function handleGame(room: Room, io: Server) {
   if (room.gameStarted === false) {
+    room.codeforcesQueue = null;
     room.players.forEach((player) => {
       player.reset();
     });
@@ -373,8 +492,8 @@ async function handleGame(room: Room, io: Server) {
       };
       room.map = GameMap.from_custom_map(customMapData, room.players, room.revealKing);
     } else {
-      let actualWidth = Math.ceil(Math.sqrt(room.players.length) * 5 + 12 * room.mapWidth);
-      let actualHeight = Math.ceil(Math.sqrt(room.players.length) * 5 + 12 * room.mapHeight);
+      const actualWidth = Math.ceil(Math.sqrt(room.players.length) * 5 + 12 * room.mapWidth);
+      const actualHeight = Math.ceil(Math.sqrt(room.players.length) * 5 + 12 * room.mapHeight);
       room.map = new GameMap(
         'random_map_id',
         'random_map_name',
@@ -391,146 +510,117 @@ async function handleGame(room: Room, io: Server) {
       console.log(`Start game with random map `);
     }
     room.mapGenerated = true;
-    room.globalMapDiff = new MapDiff();
-    room.gameRecord = new GameRecord(room.players, room.map.width, room.map.height);
+    const gameMap = room.map;
+    if (!gameMap) throw new Error('Game map was not initialized');
+    const globalMapDiff = new MapDiff();
+    const gameRecord = new GameRecord(room.players, gameMap.width, gameMap.height);
+    room.globalMapDiff = globalMapDiff;
+    room.gameRecord = gameRecord;
 
     // Now: Client can get map name / width / height !
     // todo 对于自定义地图，地图名称应该在游戏开始前获知，而不是开始时
     console.info(`Start game`);
     room.gameStarted = true;
-    let intro_message = 'Chat is being recorded. Have fun!';
-    room.gameRecord.addMessage({ turn: room.map.turn, player: null, content: intro_message });
+    const intro_message = 'Chat is being recorded. Have fun!';
+    gameRecord.addMessage({ turn: gameMap.turn, player: null, content: intro_message });
     io.in(room.id).emit('update_room', room);
     io.in(room.id).emit('room_message', null, intro_message);
     room.players.forEach((player) => {
-      let player_socket = io.sockets.sockets.get(player.socket_id);
+      const player_socket = io.sockets.sockets.get(player.socket_id);
       if (player_socket) {
-        let initGameInfo: initGameInfo = {
+        const initGameInfo: initGameInfo = {
           king: player.king ? { x: player.king.x, y: player.king.y } : { x: 0, y: 0 }, // spectator's king is null
-          mapWidth: room.map.width,
-          mapHeight: room.map.height,
+          mapWidth: gameMap.width,
+          mapHeight: gameMap.height,
         };
         player_socket.emit('game_started', initGameInfo);
         player.patchView = new MapDiff();
       }
     });
 
-    let updTime = 500 / room.gameSpeed;
+    const updTime = 500 / room.gameSpeed;
     room.gameLoop = setInterval(async () => {
       try {
+        if (!room.gameStarted) return;
         room.players.forEach((player) => {
-          if (!room.map) throw new Error('king is null');
-
-          if (player.activeChallenge && player.activeChallenge.expiresAtTurn <= room.map.turn) {
+          if (player.activeChallenge && player.activeChallenge.expiresAtTurn <= gameMap.turn) {
             player.activeChallenge = null;
-            player.challengeCooldownUntilTurn = room.map.turn + COMMANDER_CONFIG.math.cooldownTurns;
-            let player_socket = io.sockets.sockets.get(player.socket_id);
+            player.challengeCooldownUntilTurn = gameMap.turn + COMMANDER_CONFIG.math.cooldownTurns;
+            const player_socket = io.sockets.sockets.get(player.socket_id);
             if (player_socket) {
               player_socket.emit('challenge_expired', { source: 'MATH', message: 'Math challenge expired.' });
             }
             io.in(room.id).emit('update_room', room);
           }
 
-          if (
-            player.activeCodeforcesChallenge &&
-            !player.activeCodeforcesChallenge.rewarded &&
-            player.activeCodeforcesChallenge.expiresAt <= Date.now()
-          ) {
-            player.activeCodeforcesChallenge = null;
-            const playerSocket = io.sockets.sockets.get(player.socket_id);
-            playerSocket?.emit('challenge_expired', {
-              source: 'CODEFORCES',
-              message: 'Codeforces challenge expired. Request a new assignment.',
-            });
-          }
-
-          if (!player.isDead && !player.spectating() && !player.disconnected) {
-            let block = room.map.getBlock(player.king);
-            let blockPlayerIndex = getPlayerIndex(room, block.player?.id);
+          if (!player.isDead && !player.spectating()) {
+            const king = player.king;
+            if (!king) {
+              console.error(`Active player ${player.id} has no king`);
+              neutralizePlayer(room, player);
+              return;
+            }
+            const block = gameMap.getBlock(king);
+            const blockPlayerIndex = getPlayerIndex(room, block.player?.id);
             if (blockPlayerIndex !== -1) {
               if (block.player !== player && player.isDead === false) {
                 console.log(block.player.username, 'captured', player.username);
                 io.in(room.id).emit('captured', block.player.minify(), player.minify());
-                let player_socket = io.sockets.sockets.get(player.socket_id);
+                const player_socket = io.sockets.sockets.get(player.socket_id);
                 if (player_socket) {
                   player_socket.emit('game_over', block.player.minify()); // captured by block.player
-                } else {
-                  throw new Error('socket is null');
                 }
                 player.isDead = true;
                 player.land.forEach((block) => {
-                  room.map.transferBlock(block, room.players[blockPlayerIndex]);
+                  gameMap.transferBlock(block, room.players[blockPlayerIndex]);
                   room.players[blockPlayerIndex].winLand(block);
                 });
-                room.map.getBlock(player.king).kingBeDominated();
+                gameMap.getBlock(king).kingBeDominated();
                 player.land.length = 0;
-              } else if (player.operatedTurn === 0 && player.operatedTurn + 160 <= room.map.turn) {
+                if (!room.codeforcesQueue) tryInitializeCodeforcesQueue(room, io);
+              } else if (!player.disconnected && player.operatedTurn === 0 && player.operatedTurn + 160 <= gameMap.turn) {
                 // if player is not operated for 160/2 turns, it will be neutralized
-                handleNeutralized(room, player);
+                neutralizePlayer(room, player);
+                if (!room.codeforcesQueue) tryInitializeCodeforcesQueue(room, io);
                 io.in(room.id).emit('room_message', player.minify(), 'surrendered');
               }
             }
           }
         });
 
-        let leaderBoardData: LeaderBoardTable = room.players
+        const leaderBoardData: LeaderBoardTable = room.players
           .filter((player) => !player.spectating())
           .map((player) => {
-            let data = room.map.getTotal(player);
+            const data = gameMap.getTotal(player);
             return [player.color, player.team, data.army, data.land] as LeaderBoardRow;
           });
 
-        let room_sockets = await io.in(room.id).fetchSockets();
+        const room_sockets = await io.in(room.id).fetchSockets();
+        if (!room.gameStarted) return;
 
-        for (let socket of room_sockets) {
-          let playerIndex = getPlayerIndexBySocket(room, socket.id);
-          if (playerIndex !== -1 && room.players[playerIndex].patchView && !room.players[playerIndex].disconnected) {
-            if (
-              (room.deathSpectator && room.players[playerIndex].isDead) ||
-              !room.fogOfWar ||
-              room.players[playerIndex].spectating()
-            ) {
-              await room.players[playerIndex].patchView.patch(room.map.map);
+        for (const socket of room_sockets) {
+          if (!room.gameStarted) return;
+          const playerIndex = getPlayerIndexBySocket(room, socket.id);
+          const viewPlayer = room.players[playerIndex];
+          const patchView = viewPlayer?.patchView;
+          if (playerIndex !== -1 && patchView && !viewPlayer.disconnected) {
+            if ((room.deathSpectator && viewPlayer.isDead) || !room.fogOfWar || viewPlayer.spectating()) {
+              await patchView.patch(gameMap.map);
             } else {
-              await room.players[playerIndex].patchView.patch(await room.map.getViewPlayer(room.players[playerIndex]));
+              await patchView.patch(await gameMap.getViewPlayer(viewPlayer));
             }
-            socket.emit('game_update', room.players[playerIndex].patchView.data, room.map.turn, leaderBoardData);
+            socket.emit('game_update', patchView.data, gameMap.turn, leaderBoardData);
           }
         }
 
-        await room.globalMapDiff.patch(room.map.map);
-        room.gameRecord.addGameUpdate(room.globalMapDiff.data, room.map.turn, leaderBoardData);
-        room.map.updateTurn();
-        room.map.updateUnit();
+        await globalMapDiff.patch(gameMap.map);
+        if (!room.gameStarted) return;
+        gameRecord.addGameUpdate(globalMapDiff.data, gameMap.turn, leaderBoardData);
+        gameMap.updateTurn();
+        gameMap.updateUnit();
 
-        let aliveTeams = [];
-        for (let player of room.players) {
-          if (!player.isDead && !player.spectating() && !aliveTeams.includes(player.team)) {
-            aliveTeams.push(player.team);
-          }
-        }
-        // Game over, Find Winner
-        if (aliveTeams.length <= 1) {
-          if (!aliveTeams.length) return;
-          let link = room.gameRecord.outPutToJSON(process.cwd());
-          io.in(room.id).emit(
-            'game_ended',
-            room.players.filter((x) => x.team === aliveTeams[0]).map((x) => x.minify(true)),
-            link
-          ); // winner
-          console.log('Game ended, replay link: ', link);
-
-          room.gameStarted = false;
-          room.forceStartNum = 0;
-          io.in(room.id).emit('update_room', room);
-
-          room.players.forEach((player) => {
-            player.reset();
-          });
-
-          room.players = room.players.filter((p) => !p.disconnected);
-          clearInterval(room.gameLoop);
-        }
+        const outcome = getGameOutcome(room);
+        if (outcome.terminal) finishGame(room, io, gameRecord);
       } catch (e: any) {
         console.error(JSON.stringify(e, ['message', 'arguments', 'type', 'name']));
         console.log(e.stack);
@@ -560,95 +650,114 @@ io.on('connection', async (socket) => {
   // ====================================
   // init
   // ====================================
-  let room: Room;
   let player: Player;
 
   console.log(`new ${socket.id} connected`);
 
-  let params = socket.handshake.query;
+  const params = socket.handshake.query;
+  let username = String(get_query_param(params, 'username') || '');
+  const roomId = String(get_query_param(params, 'roomId') || '');
+  const claimedPlayerId = typeof socket.handshake.auth?.playerId === 'string' ? socket.handshake.auth.playerId : '';
+  const reconnectToken = typeof socket.handshake.auth?.reconnectToken === 'string' ? socket.handshake.auth.reconnectToken : '';
 
-  let username = get_query_param(params, 'username');
-  let roomId = get_query_param(params, 'roomId');
-  let myPlayerId = get_query_param(params, 'myPlayerId');
-
-  console.log(`new connect: ${username} ${roomId} ${myPlayerId}`);
+  console.log(`new connect: ${username} ${roomId} ${claimedPlayerId || 'new-session'}`);
 
   // validate roomId and username
-  if (!roomId) {
-    reject_join(socket, `roomId: ${username} is invalid`);
+  if (!/^[A-Za-z0-9_-]{1,50}$/.test(roomId)) {
+    reject_join(socket, 'Room ID is invalid.');
     return;
   }
   username = xss(username);
   if (!username.length) {
     username = 'Anonymous';
   }
-  if (!roomPool[roomId]) {
-    try {
-      await createRoom(roomId);
-    } catch (e: any) {
-      reject_join(socket, e.message);
-      console.error(JSON.stringify(e, ['message', 'arguments', 'type', 'name']));
-      console.log(e.stack);
-    }
-    // return;
-  }
-  room = roomPool[roomId];
-  // check room status
-  if (room.players.length >= room.maxPlayers) {
-    reject_join(socket, 'The room is full.');
+  if (!Object.prototype.hasOwnProperty.call(roomPool, roomId) && claimedPlayerId) {
+    reject_join(socket, 'Session authentication failed or reconnect grace expired.');
     return;
-  } else {
-    socket.join(roomId as string);
   }
-
-  let isValidReconnectPlayer = false;
-
-  if (myPlayerId) {
-    // reconnect or same user with multiple tabs
-    // todo: unfinished 因为玩家 disconnect 后，对应的 id会被清空，需要区分正常退出（清除id）和异常退出（保留玩家id）的情况
-    let playerIndex = getPlayerIndex(room, myPlayerId);
-
-    if (playerIndex !== -1) {
-      isValidReconnectPlayer = true;
-      room.players = room.players.filter((p) => p !== player);
-      player = room.players[playerIndex];
-      player.disconnected = false;
-      room.players[playerIndex].socket_id = socket.id;
-      io.in(room.id).emit('room_message', player.minify(), 're-joined the lobby.');
-      io.in(room.id).emit('update_room', room);
-
-      if (room.gameStarted) {
-        let initGameInfo: initGameInfo = {
-          king: player.isDead ? { x: 0, y: 0 } : { x: player.king.x, y: player.king.y },
-          mapWidth: room.map.width,
-          mapHeight: room.map.height,
-        };
-        socket.emit('game_started', initGameInfo);
-        player.patchView = new MapDiff();
-      }
+  if (!Object.prototype.hasOwnProperty.call(roomPool, roomId)) {
+    const createResult = await createRoom(roomId);
+    if (!createResult.success) {
+      reject_join(socket, createResult.message || 'Unable to create the room.');
+      return;
     }
   }
+  const room = roomPool[roomId];
+  if (!room) {
+    reject_join(socket, 'Unable to load the room.');
+    return;
+  }
 
-  if (!isValidReconnectPlayer) {
-    let playerId = crypto
+  if (claimedPlayerId) {
+    const reconnectingPlayer = room.players.find((candidate) => candidate.id === claimedPlayerId);
+    if (!reconnectingPlayer) {
+      reject_join(socket, 'Session authentication failed or reconnect grace expired.');
+      return;
+    }
+    const activeSocketConnected = Boolean(
+      reconnectingPlayer.socket_id && io.sockets.sockets.get(reconnectingPlayer.socket_id)?.connected
+    );
+    const authorization = authorizeReconnect(reconnectingPlayer, reconnectToken, activeSocketConnected);
+    if (authorization.ok === false) {
+      const message =
+        authorization.reason === 'DUPLICATE_SESSION'
+          ? 'This player session is already active on another connection.'
+          : 'Session authentication failed or reconnect grace expired.';
+      reject_join(socket, message);
+      return;
+    }
+
+    player = reconnectingPlayer;
+    restoreConnectedPlayer(player, socket.id);
+    socket.join(room.id);
+    issuePlayerSession(player, socket);
+    io.in(room.id).emit('room_message', player.minify(), 'reconnected.');
+    io.in(room.id).emit('update_room', room);
+
+    if (room.gameStarted) {
+      const gameMap = room.map;
+      if (!gameMap) {
+        reject_join(socket, 'The active room has no game map.');
+        return;
+      }
+      const king = player.king;
+      const initGameInfo: initGameInfo = {
+        king: player.isDead || !king ? { x: 0, y: 0 } : { x: king.x, y: king.y },
+        mapWidth: gameMap.width,
+        mapHeight: gameMap.height,
+      };
+      socket.emit('game_started', initGameInfo);
+      player.patchView = new MapDiff();
+    }
+  } else {
+    if (room.players.length >= room.maxPlayers || room.players.length >= MAX_SUPPORTED_PLAYERS) {
+      reject_join(socket, 'The room is full.');
+      return;
+    }
+    const playerId = crypto
       .randomBytes(Math.ceil(10 / 2))
       .toString('hex')
       .slice(0, 10);
 
-    let allColor = Array.from({ length: ColorArr.length }, (_, i) => i);
-    let occupiedColor = room.players.map((player) => player.color);
+    const allColor = Array.from({ length: ColorArr.length }, (_, i) => i);
+    const occupiedColor = room.players.map((player) => player.color);
     occupiedColor.push(0); // 0 is reserved for neutral block
-    let availableColor = allColor.filter((color) => {
+    const availableColor = allColor.filter((color) => {
       return !occupiedColor.includes(color);
     });
-    let playerColor = availableColor[0];
+    const playerColor = availableColor[0];
 
-    let allTeam = Array.from({ length: MaxTeamNum }, (_, i) => i + 1);
-    let occupiedTeam = room.players.map((player) => player.team);
-    let availableTeam = allTeam.filter((team) => {
+    const allTeam = Array.from({ length: MaxTeamNum }, (_, i) => i + 1);
+    const occupiedTeam = room.players.map((player) => player.team);
+    const availableTeam = allTeam.filter((team) => {
       return !occupiedTeam.includes(team);
     });
-    let playerTeam = availableTeam[0];
+    const playerTeam = availableTeam[0];
+
+    if (playerColor === undefined || playerTeam === undefined) {
+      reject_join(socket, 'The room has reached the supported player limit.');
+      return;
+    }
 
     player = new Player(playerId, socket.id, username, playerColor, playerTeam);
     console.log(`Connect! Socket ${socket.id}, room ${roomId} name ${username} playerId ${playerId} color ${playerColor}`);
@@ -657,16 +766,22 @@ io.on('connection', async (socket) => {
       player.setRoomHost(true);
     }
 
-    socket.emit('set_player_id', player.id);
+    socket.join(room.id);
+    issuePlayerSession(player, socket);
 
     let message = 'joined the room.';
 
     if (room.gameStarted) {
+      const gameMap = room.map;
+      if (!gameMap) {
+        reject_join(socket, 'The active room has no game map.');
+        return;
+      }
       player.setSpectate();
-      let initGameInfo: initGameInfo = {
+      const initGameInfo: initGameInfo = {
         king: { x: 0, y: 0 }, // spectator's king is null
-        mapWidth: room.map.width,
-        mapHeight: room.map.height,
+        mapWidth: gameMap.width,
+        mapHeight: gameMap.height,
       };
       socket.emit('game_started', initGameInfo);
       player.patchView = new MapDiff();
@@ -679,10 +794,6 @@ io.on('connection', async (socket) => {
     io.in(room.id).emit('room_message', player.minify(), message);
     io.in(room.id).emit('update_room', room);
     console.log(player.username, message);
-
-    // if (room.players.length >= room.maxPlayers) {
-    //   await handleGame(room, io);
-    // }
   }
 
   // ====================================
@@ -693,59 +804,52 @@ io.on('connection', async (socket) => {
     socket.emit('update_room', room);
   });
 
-  socket.on('set_team', async (team) => {
-    if ((team as number) <= 0 || (team as number) > MaxTeamNum + 1) {
-      socket.emit('error', 'Unable to change team', `Team must be between 1 and ${MaxTeamNum} or spectators`);
+  socket.on('set_team', (team: unknown) => {
+    const result = changeTeamForSocket(room, socket.id, team);
+    if (result.ok === false) {
+      socket.emit('error', 'Unable to change team', result.message);
       return;
     }
-    player.team = team as number;
-
-    if (player.spectating()) {
-      // set spectate will cancel force start
-      let playerIndex = getPlayerIndex(room, player.id);
-      if (room.players[playerIndex].forceStart === true) {
-        room.players[playerIndex].forceStart = false;
-        --room.forceStartNum;
-      }
-    }
+    const actingPlayer = result.value;
     io.in(room.id).emit('update_room', room);
-    io.in(room.id).emit('room_message', player.minify(), player.spectating() ? 'became a spectator.' : `change to team ${team}.`);
+    io.in(room.id).emit(
+      'room_message',
+      actingPlayer.minify(),
+      actingPlayer.spectating() ? 'became a spectator.' : `changed to team ${String(team)}.`
+    );
     checkForcedStart(room, io);
   });
 
-  socket.on('surrender', async (playerId) => {
-    let playerIndex = getPlayerIndex(room, playerId);
-    if (playerIndex === -1) {
-      socket.emit('error', 'Surrender failed', 'Player not found.');
+  socket.on('surrender', () => {
+    const result = surrenderForSocket(room, socket.id);
+    if (result.ok === false) {
+      socket.emit('surrender_result', { status: 'REJECTED', code: result.code, message: result.message });
+      socket.emit('error', 'Surrender failed', result.message);
       return;
     }
-    player = room.players[playerIndex];
-
-    console.log(`${player.username} surrendered.`);
-
-    if (!room.map) {
-      socket.emit('error', 'Surrender failed', 'Map not found.');
-      console.log('Error! Map not found.');
-      return;
-    }
-
-    await handleNeutralized(room, player);
-
-    io.in(room.id).emit('room_message', player.minify(), 'surrendered');
+    const actingPlayer = result.value;
+    console.log(`${actingPlayer.username} surrendered.`);
+    if (!room.codeforcesQueue) tryInitializeCodeforcesQueue(room, io);
+    socket.emit('surrender_result', { status: 'ACCEPTED' });
+    io.in(room.id).emit('room_message', actingPlayer.minify(), 'surrendered');
+    const outcome = getGameOutcome(room);
+    if (outcome.terminal && room.gameRecord) finishGame(room, io, room.gameRecord);
+    else io.in(room.id).emit('update_room', room);
   });
 
   socket.on('change_host', async (playerId) => {
     try {
-      if (!player.isRoomHost) {
+      const actingPlayer = resolveSocketPlayer(room, socket.id);
+      if (!actingPlayer?.isRoomHost) {
         throw new Error('You are not the room host.');
       }
-      let currentHost = getPlayerIndex(room, player.id);
-      let newHost = getPlayerIndex(room, playerId);
-      if (newHost !== -1) {
+      const currentHost = getPlayerIndex(room, actingPlayer.id);
+      const newHost = getPlayerIndex(room, playerId);
+      if (currentHost !== -1 && newHost !== -1) {
         room.players[currentHost].setRoomHost(false);
         room.players[newHost].setRoomHost(true);
         io.in(room.id).emit('update_room', room);
-        io.in(room.id).emit('host_modification', player.minify(), room.players[newHost]);
+        io.in(room.id).emit('host_modification', actingPlayer.minify(), room.players[newHost]);
       } else {
         throw new Error('Target player not found.');
       }
@@ -756,103 +860,64 @@ io.on('connection', async (socket) => {
 
   socket.on('change_room_setting', async (property: string, value: number | string | boolean) => {
     try {
-      if (player.isRoomHost) {
-        console.log('Changing Room Setting ', property, value);
-        if (property in room && value !== undefined) {
-          // todo: move validation to Room class
-          switch (property) {
-            case 'roomName':
-              if (typeof value !== 'string' || value.length > 20) {
-                socket.emit('error', 'Modification was failed', 'Room name is too long.');
-                return;
-              }
-              break;
-            case 'mapId':
-              if (typeof value !== 'string' || value.length > 50) {
-                socket.emit('error', 'Modification was failed', 'invalid MapId');
-                return;
-              }
-              const map = await prisma.customMapData.findUnique({
-                where: { id: value },
-                select: { name: true },
-              });
-              room.mapName = map?.name || '';
-              break;
-            case 'maxPlayers':
-              if (typeof value !== 'number' || value <= 1) {
-                socket.emit('error', 'Modification was failed', 'Max player num is invalid.');
-                return;
-              }
-              break;
-            case 'gameSpeed':
-              if (typeof value !== 'number' || ![0.5, 0.75, 1, 2, 3, 4].includes(value)) {
-                socket.emit('error', 'Modification was failed', `Game speed: ${value} is invalid. typeof value ${typeof value}}`);
-                return;
-              }
-              break;
-            case 'mapWidth':
-            case 'mapHeight':
-            case 'mountain':
-            case 'city':
-            case 'swamp':
-              if (typeof value !== 'number' || value < 0 || value > 1) {
-                socket.emit('error', 'Modification was failed', `Map ${property} is invalid.`);
-                return;
-              }
-              break;
-            case 'fogOfWar':
-            case 'revealKing':
-            case 'warringStatesMode':
-            case 'deathSpectator':
-              if (typeof value !== 'boolean') {
-                socket.emit('error', 'Modification was failed', 'Invalid value.');
-                return;
-              }
-              break;
-            default:
-              break;
-          }
-
-          room[property] = value;
-          io.in(room.id).emit('update_room', room);
-          if (property === 'mapId') {
-            io.in(room.id).emit('room_message', player.minify(), `changed mapName to ${room.mapName}.`);
-          } else {
-            io.in(room.id).emit('room_message', player.minify(), `changed ${property} to ${value}.`);
-          }
-        } else {
-          socket.emit('error', 'Modification was failed', `Invalid property: ${property} or value: ${value}.`);
-        }
-      } else {
-        socket.emit('error', 'Modification was failed', 'You are not the game host.');
+      const authorization = authorizeRoomSettingForSocket(room, socket.id, property, value);
+      if (authorization.ok === false) {
+        socket.emit('error', 'Modification was failed', authorization.message);
+        return;
       }
+
+      const { player: actingPlayer, property: settingKey } = authorization.value;
+      let settingValue = authorization.value.value;
+      if (settingKey === 'roomName') settingValue = xss(settingValue as string);
+      if (settingKey === 'mapId') {
+        if (settingValue === '') {
+          room.mapName = '';
+        } else {
+          const map = await prisma.customMapData.findUnique({
+            where: { id: settingValue as string },
+            select: { name: true },
+          });
+          const liveActor = resolveSocketPlayer(room, socket.id);
+          if (!map || room.gameStarted || !liveActor?.isRoomHost) {
+            socket.emit('error', 'Modification was failed', 'Map not found or room settings are locked.');
+            return;
+          }
+          room.mapName = map.name;
+        }
+      }
+
+      applyRoomSetting(room, settingKey, settingValue);
+      io.in(room.id).emit('update_room', room);
+      io.in(room.id).emit('room_message', actingPlayer.minify(), `changed ${property}.`);
     } catch (e: any) {
-      console.log(e.message);
+      console.error('change_room_setting failed:', e);
+      socket.emit('error', 'Modification was failed', 'Unable to change that room setting.');
     }
   });
 
   socket.on('player_message', async (message) => {
-    if (room.gameStarted) {
-      room.gameRecord.addMessage({ turn: room.map.turn, player: player.minify(), content: message });
+    const actingPlayer = resolveSocketPlayer(room, socket.id);
+    if (!actingPlayer) return;
+    if (room.gameStarted && room.gameRecord && room.map) {
+      room.gameRecord.addMessage({ turn: room.map.turn, player: actingPlayer.minify(), content: message });
     }
-    io.in(room.id).emit('room_message', player.minify(), ': ' + message);
+    io.in(room.id).emit('room_message', actingPlayer.minify(), ': ' + message);
   });
 
   socket.on('disconnect', async () => {
-    await handleDisconnectInRoom(room, player, io);
-    socket.disconnect();
+    handleDisconnectInRoom(room, player, socket.id, io);
     checkForcedStart(room, io); // check if game can start
   });
 
   socket.on('force_start', async () => {
     try {
-      let playerIndex = getPlayerIndex(room, player.id);
-      if (playerIndex !== -1 && room.players[playerIndex] && !room.players[playerIndex].spectating()) {
-        if (room.players[playerIndex].forceStart === true) {
-          room.players[playerIndex].forceStart = false;
+      const actingPlayer = resolveSocketPlayer(room, socket.id);
+      if (actingPlayer && !actingPlayer.spectating()) {
+        if (actingPlayer.forceStart === true) {
+          actingPlayer.forceStart = false;
           --room.forceStartNum;
         } else {
-          room.players[playerIndex].forceStart = true;
+          actingPlayer.forceStart = true;
           ++room.forceStartNum;
         }
         io.in(room.id).emit('update_room', room);
@@ -867,48 +932,48 @@ io.on('connection', async (socket) => {
 
   socket.on('attack', async (from: Point, to: Point, isHalf: boolean) => {
     try {
+      const gameMap = room.map;
+      if (!room.gameStarted || !gameMap) {
+        socket.emit('attack_failure', from, to, 'The match is not active');
+        return;
+      }
       if (typeof isHalf !== 'boolean') {
         socket.emit('attack_failure', from, to, 'Invalid parameter type');
         return;
       }
-      if (from.x < 0 || from.x >= room.map.width || from.y < 0 || from.y >= room.map.height) {
+      if (from.x < 0 || from.x >= gameMap.width || from.y < 0 || from.y >= gameMap.height) {
         socket.emit('attack_failure', from, to, 'Invalid starting point');
         return;
       }
 
-      if (to.x < 0 || to.x >= room.map.width || to.y < 0 || to.y >= room.map.height) {
+      if (to.x < 0 || to.x >= gameMap.width || to.y < 0 || to.y >= gameMap.height) {
         socket.emit('attack_failure', from, to, 'Invalid ending point, out of map');
         return;
       }
 
-      if (Math.abs(from.x - to.x) > 1 || Math.abs(from.y - to.y) > 1) {
-        socket.emit('attack_failure', from, to, 'Invalid ending point, not adjacent');
+      if (!isOrthogonalMove(from, to)) {
+        socket.emit('attack_failure', from, to, 'Invalid ending point; movement must be orthogonally adjacent');
         return;
       }
 
-      let playerIndex = getPlayerIndexBySocket(room, socket.id);
-      if (playerIndex !== -1) {
-        let player = room.players[playerIndex];
-        const canOperate = player.operatedTurn < room.map.turn;
-        if (room.map && canOperate && room.map.commendable(player, from, to)) {
+      const actingPlayer = resolveSocketPlayer(room, socket.id);
+      if (actingPlayer && !actingPlayer.isDead && !actingPlayer.spectating() && actingPlayer.king) {
+        const canOperate = actingPlayer.operatedTurn < gameMap.turn;
+        if (canOperate && gameMap.commendable(actingPlayer, from, to)) {
           if (isHalf) {
-            room.map.moveHalfMovableUnit(player, from, to);
+            gameMap.moveHalfMovableUnit(actingPlayer, from, to);
           } else {
-            room.map.moveAllMovableUnit(player, from, to);
+            gameMap.moveAllMovableUnit(actingPlayer, from, to);
           }
 
-          player.operatedTurn = room.map.turn;
-          socket.emit('attack_success', from, to, room.map.turn);
+          actingPlayer.operatedTurn = gameMap.turn;
+          socket.emit('attack_success', from, to, gameMap.turn);
         } else {
           socket.emit(
             'attack_failure',
             from,
             to,
-            `Invalid operation: ${player.operatedTurn} ${room.map.turn} ${room.map.commendable(
-              player,
-              from,
-              to
-            )}`
+            `Invalid operation: ${actingPlayer.operatedTurn} ${gameMap.turn} ${gameMap.commendable(actingPlayer, from, to)}`
           );
         }
       }
@@ -934,6 +999,10 @@ io.on('connection', async (socket) => {
       },
       abilities: COMMANDER_CONFIG.abilities,
     });
+  });
+
+  socket.on('get_codeforces_queue_status', () => {
+    if (room.gameStarted) emitCodeforcesQueueStatus(room, io);
   });
 
   const requestMathChallenge = () => {
@@ -1049,20 +1118,28 @@ io.on('connection', async (socket) => {
   socket.on('submit_challenge', submitMathAnswer);
 
   socket.on('request_codeforces_challenge', async (payload?: { handle?: string }) => {
-    if (!room || !room.gameStarted || !room.map) return;
+    if (!room.gameStarted || !room.map) return;
     const currPlayer = room.players.find((p) => p.socket_id === socket.id);
-    if (!currPlayer || currPlayer.isDead || currPlayer.spectating()) return;
+    if (!currPlayer || currPlayer.isDead || currPlayer.disconnected || currPlayer.spectating()) return;
 
-    const now = Date.now();
-    if (currPlayer.activeCodeforcesChallenge && !currPlayer.activeCodeforcesChallenge.rewarded) {
-      socket.emit('challenge_error', {
-        source: 'CODEFORCES',
-        message: 'Finish or wait for the active Codeforces challenge to expire.',
-      });
+    if (room.codeforcesQueue) {
+      if (!room.codeforcesQueue.hasPlayer(currPlayer.id)) {
+        socket.emit('challenge_error', { source: 'CODEFORCES', message: 'You are not part of this match queue.' });
+        return;
+      }
+      if (currPlayer.activeCodeforcesChallenge) {
+        socket.emit('codeforces_challenge', currPlayer.activeCodeforcesChallenge);
+        return;
+      }
+      const queuePosition = room.codeforcesQueue.getPlayerPosition(currPlayer.id);
+      if (queuePosition !== null) {
+        emitCodeforcesAssignment(currPlayer, createCodeforcesAssignment(room, currPlayer, queuePosition));
+      }
       return;
     }
-    if (now - currPlayer.lastCodeforcesChallengeAt < COMMANDER_CONFIG.codeforces.assignmentCooldownMs) {
-      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'Codeforces assignment systems are cooling down.' });
+
+    if (currPlayer.codeforcesHistoryLoading) {
+      socket.emit('codeforces_challenge_pending', { message: 'Your solved history is already queued.' });
       return;
     }
 
@@ -1072,62 +1149,84 @@ io.on('connection', async (socket) => {
       return;
     }
 
+    const normalizedHandle = handle.toLowerCase();
+    if (currPlayer.codeforcesSolvedSetReady && currPlayer.codeforcesHandle.trim().toLowerCase() === normalizedHandle) {
+      socket.emit('codeforces_history_ready', { handle: currPlayer.codeforcesHandle });
+      emitCodeforcesQueueStatus(room, io);
+      tryInitializeCodeforcesQueue(room, io);
+      return;
+    }
+    const duplicateHandle = room.players.some(
+      (candidate) => candidate.id !== currPlayer.id && candidate.codeforcesHandle.trim().toLowerCase() === normalizedHandle
+    );
+    if (duplicateHandle) {
+      socket.emit('challenge_error', {
+        source: 'CODEFORCES',
+        message: 'This Codeforces handle is already registered by another player in this grid.',
+      });
+      return;
+    }
+
     const playerId = currPlayer.id;
     const roomIdForRequest = room.id;
-    currPlayer.lastCodeforcesChallengeAt = now;
-    socket.emit('codeforces_challenge_pending', { message: 'Checking handle and preparing an unsolved problem…' });
+    currPlayer.codeforcesHandle = handle;
+    currPlayer.codeforcesSolvedSet = new Set<string>();
+    currPlayer.codeforcesSolvedSetReady = false;
+    currPlayer.codeforcesHistoryLoading = true;
+    socket.emit('codeforces_challenge_pending', { message: 'Fetching your solved history through the shared API queue…' });
+    emitCodeforcesQueueStatus(room, io);
 
     try {
-      let solvedSet = currPlayer.codeforcesSolvedSet;
-      if (!currPlayer.codeforcesSolvedSetReady || currPlayer.codeforcesHandle !== handle) {
-        solvedSet = await codeforcesApiQueue.fetchSolvedSet(handle);
-      }
+      const solvedSet = await codeforcesApiQueue.fetchSolvedSet(handle);
 
       const liveRoom = roomPool[roomIdForRequest];
       const livePlayer = liveRoom?.players.find((p) => p.id === playerId);
-      if (!liveRoom?.gameStarted || !liveRoom.map || !livePlayer || livePlayer.isDead) return;
+      if (!liveRoom?.gameStarted || !liveRoom.map || !livePlayer || livePlayer.codeforcesHandle !== handle) return;
 
-      livePlayer.codeforcesHandle = handle;
+      livePlayer.codeforcesHistoryLoading = false;
+      if (livePlayer.isDead || livePlayer.disconnected || livePlayer.spectating()) {
+        tryInitializeCodeforcesQueue(liveRoom, io);
+        return;
+      }
       livePlayer.codeforcesSolvedSet = solvedSet;
       livePlayer.codeforcesSolvedSetReady = true;
-      const problem = selectCodeforcesProblem(solvedSet);
-      const issuedAt = Date.now();
-      livePlayer.activeCodeforcesChallenge = {
-        id: crypto.randomUUID(),
-        ...problem,
-        rewardEnergy: COMMANDER_CONFIG.codeforces.energyReward,
-        rewardTroops: COMMANDER_CONFIG.codeforces.troopReward,
-        challengeIssuedAt: issuedAt,
-        expiresAt: issuedAt + COMMANDER_CONFIG.codeforces.assignmentTtlMs,
-        rewarded: false,
-        verificationInProgress: false,
-      };
       livePlayer.operatedTurn = liveRoom.map.turn;
-      io.sockets.sockets
-        .get(livePlayer.socket_id)
-        ?.emit('codeforces_challenge', livePlayer.activeCodeforcesChallenge);
+      io.sockets.sockets.get(livePlayer.socket_id)?.emit('codeforces_history_ready', { handle });
+      tryInitializeCodeforcesQueue(liveRoom, io);
       io.in(liveRoom.id).emit('update_room', liveRoom);
     } catch (error) {
-      if (!(error instanceof CodeforcesCatalogueError)) currPlayer.lastCodeforcesChallengeAt = 0;
+      const liveRoom = roomPool[roomIdForRequest];
+      const livePlayer = liveRoom?.players.find((candidate) => candidate.id === playerId);
+      if (livePlayer?.codeforcesHandle === handle) {
+        livePlayer.codeforcesHandle = '';
+        livePlayer.codeforcesSolvedSet = new Set<string>();
+        livePlayer.codeforcesSolvedSetReady = false;
+        livePlayer.codeforcesHistoryLoading = false;
+      }
       const code = error instanceof CodeforcesApiError ? error.code : 'UNAVAILABLE';
       const message =
-        error instanceof CodeforcesCatalogueError
-          ? 'You have already solved every available problem in this challenge band.'
-          : code === 'INVALID_HANDLE'
+        code === 'INVALID_HANDLE'
           ? 'Codeforces handle not found. Check the spelling and try again.'
           : 'Codeforces is temporarily unavailable. Try again shortly.';
-      socket.emit('challenge_error', { source: 'CODEFORCES', message });
+      io.sockets.sockets.get(livePlayer?.socket_id || socket.id)?.emit('challenge_error', {
+        source: 'CODEFORCES',
+        message,
+      });
+      if (liveRoom) {
+        emitCodeforcesQueueStatus(liveRoom, io);
+        io.in(liveRoom.id).emit('update_room', liveRoom);
+      }
     }
   });
 
-  socket.on('verify_codeforces_solution', (payload?: { contestId?: number; problemIndex?: string }) => {
-    if (!room || !room.gameStarted || !room.map) {
+  socket.on('verify_codeforces_solution', (payload?: { contestId?: number; problemIndex?: string; queuePosition?: number }) => {
+    if (!room.gameStarted || !room.map) {
       socket.emit('challenge_error', { source: 'CODEFORCES', message: 'The match is not active.' });
       return;
     }
 
     const currPlayer = room.players.find((candidate) => candidate.socket_id === socket.id);
-    if (!currPlayer || currPlayer.isDead || currPlayer.spectating()) {
+    if (!currPlayer || currPlayer.isDead || currPlayer.disconnected || currPlayer.spectating()) {
       socket.emit('challenge_error', { source: 'CODEFORCES', message: 'This player cannot verify a challenge.' });
       return;
     }
@@ -1137,16 +1236,19 @@ io.on('connection', async (socket) => {
       socket.emit('challenge_error', { source: 'CODEFORCES', message: 'No active Codeforces assignment.' });
       return;
     }
-    if (payload?.contestId !== assignment.contestId || payload?.problemIndex !== assignment.problemIndex) {
+    const queuePosition = room.codeforcesQueue?.getPlayerPosition(currPlayer.id);
+    if (
+      queuePosition === null ||
+      queuePosition === undefined ||
+      queuePosition !== assignment.queuePosition ||
+      payload?.contestId !== assignment.contestId ||
+      payload?.problemIndex !== assignment.problemIndex ||
+      (payload.queuePosition !== undefined && payload.queuePosition !== assignment.queuePosition)
+    ) {
       socket.emit('challenge_error', {
         source: 'CODEFORCES',
         message: 'Verification must match the server-assigned problem.',
       });
-      return;
-    }
-    if (assignment.expiresAt <= Date.now()) {
-      currPlayer.activeCodeforcesChallenge = null;
-      socket.emit('codeforces_verification_result', { status: 'EXPIRED', message: 'This challenge has expired.' });
       return;
     }
     if (assignment.rewarded) {
@@ -1162,8 +1264,7 @@ io.on('connection', async (socket) => {
     }
 
     const now = Date.now();
-    const retryAfterMs = COMMANDER_CONFIG.codeforces.verificationCooldownMs -
-      (now - currPlayer.lastCodeforcesVerificationAt);
+    const retryAfterMs = COMMANDER_CONFIG.codeforces.verificationCooldownMs - (now - currPlayer.lastCodeforcesVerificationAt);
     if (retryAfterMs > 0) {
       socket.emit('challenge_error', {
         source: 'CODEFORCES',
@@ -1193,9 +1294,13 @@ io.on('connection', async (socket) => {
         if (
           !liveRoom?.gameStarted ||
           !liveRoom.map ||
+          !liveRoom.codeforcesQueue ||
           !livePlayer ||
+          livePlayer.isDead ||
+          livePlayer.disconnected ||
           !liveAssignment ||
-          liveAssignment.id !== assignmentId
+          liveAssignment.id !== assignmentId ||
+          liveRoom.codeforcesQueue.getPlayerPosition(playerId) !== liveAssignment.queuePosition
         )
           return;
 
@@ -1233,15 +1338,18 @@ io.on('connection', async (socket) => {
         livePlayer.energy = addCommanderEnergy(livePlayer.energy, liveAssignment.rewardEnergy);
         if (livePlayer.king) liveRoom.map.getBlock(livePlayer.king).unit += liveAssignment.rewardTroops;
         livePlayer.operatedTurn = liveRoom.map.turn;
+        const nextQueuePosition = liveRoom.codeforcesQueue.advancePlayer(livePlayer.id);
+        const nextChallenge = createCodeforcesAssignment(liveRoom, livePlayer, nextQueuePosition);
         liveSocket?.emit('codeforces_verification_result', {
           status: 'ACCEPTED',
           energy: livePlayer.energy,
           rewardEnergy: liveAssignment.rewardEnergy,
           rewardTroops: liveAssignment.rewardTroops,
+          completedQueuePosition: liveAssignment.queuePosition,
+          nextChallenge,
           message: 'Accepted solution confirmed.',
         });
         liveSocket?.emit('energy_update', { energy: livePlayer.energy });
-        io.in(liveRoom.id).emit('update_room', liveRoom);
       })
       .catch((error) => {
         const liveRoom = roomPool[roomIdForVerification];

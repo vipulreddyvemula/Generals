@@ -17,8 +17,6 @@ export const COMMANDER_CONFIG = {
     clistBand: 0,
     energyReward: 50,
     troopReward: 10,
-    assignmentTtlMs: 30 * 60 * 1000,
-    assignmentCooldownMs: 60 * 1000,
     verificationCooldownMs: 10 * 1000,
     clockSkewToleranceSeconds: 30,
     apiIntervalMs: 2100,

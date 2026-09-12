@@ -161,6 +161,7 @@ const GameSetting: React.FC<GameSettingProps> = (props) => {
 
   const handleLeaveRoom = () => {
     console.log('Leave Room');
+    localStorage.removeItem(`generals.player-session.${room.id}`);
     socketRef.current.disconnect();
     router.push(`/`);
   };

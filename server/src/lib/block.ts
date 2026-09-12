@@ -15,10 +15,11 @@ class Block extends Point {
     public fortifyUntilTurn: number = 0
   ) {
     super(x, y);
+    this.unit = Math.max(0, unit);
   }
 
   setUnit(unit: number): void {
-    this.unit = unit;
+    this.unit = Math.max(0, unit);
   }
 
   setType(type: TileType): void {
@@ -67,7 +68,7 @@ class Block extends Point {
   }
 
   leaveUnit(unit: number): void {
-    this.unit -= unit;
+    this.unit = Math.max(0, this.unit - Math.max(0, unit));
   }
 
   getMovableUnit(): number {

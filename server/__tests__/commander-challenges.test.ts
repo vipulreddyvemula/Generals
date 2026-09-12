@@ -13,6 +13,17 @@ import {
   CodeforcesApiQueue,
   CodeforcesSubmission,
 } from '../src/lib/commander/cf-api-queue';
+import SharedCodeforcesQueue from '../src/lib/commander/shared-codeforces-queue';
+import type { CodeforcesProblem } from '../src/lib/commander/codeforces-catalogue';
+
+const sharedProblem = (contestId: number, problemIndex = 'A'): CodeforcesProblem => ({
+  contestId,
+  problemIndex,
+  problemName: `Problem ${contestId}${problemIndex}`,
+  rating: 800,
+  difficulty: 'SUPER_EASY',
+  clistBand: 0,
+});
 
 describe('Commander challenge authority', () => {
   it('keeps the requested reward balance in one server config', () => {
@@ -62,6 +73,52 @@ describe('Commander challenge authority', () => {
     expect(isValidCodeforcesHandle('user_name-17')).toBe(true);
     expect(isValidCodeforcesHandle('x')).toBe(false);
     expect(isValidCodeforcesHandle('bad handle')).toBe(false);
+  });
+});
+
+describe('room-wide Codeforces problem queue', () => {
+  it('excludes the union of problems solved by any eligible player', () => {
+    const candidates = [sharedProblem(1), sharedProblem(2), sharedProblem(3)];
+    const queue = new SharedCodeforcesQueue(['player-a', 'player-b'], [new Set(['1-A']), new Set(['2-A'])], (excluded) => {
+      const problem = candidates.find((candidate) => !excluded.has(`${candidate.contestId}-${candidate.problemIndex}`));
+      if (!problem) throw new Error('No problem');
+      return problem;
+    });
+
+    expect(queue.getOrCreateProblem(0)).toMatchObject({ contestId: 3, problemIndex: 'A' });
+  });
+
+  it('keeps independent player cursors on one shared problem order', () => {
+    const candidates = [sharedProblem(10), sharedProblem(20), sharedProblem(30)];
+    const queue = new SharedCodeforcesQueue(['player-a', 'player-b'], [], (excluded) => {
+      const next = candidates.find((problem) => !excluded.has(`${problem.contestId}-${problem.problemIndex}`));
+      if (!next) throw new Error('No problem');
+      return next;
+    });
+
+    const firstPositionA = queue.getPlayerPosition('player-a');
+    const firstPositionB = queue.getPlayerPosition('player-b');
+    if (firstPositionA === null || firstPositionB === null) throw new Error('Missing player position');
+    const firstForA = queue.getOrCreateProblem(firstPositionA);
+    const firstForB = queue.getOrCreateProblem(firstPositionB);
+    expect(firstForB).toEqual(firstForA);
+
+    const secondForA = queue.getOrCreateProblem(queue.advancePlayer('player-a'));
+    expect(queue.getPlayerPosition('player-b')).toBe(0);
+    expect(queue.getOrCreateProblem(queue.advancePlayer('player-b'))).toEqual(secondForA);
+    expect(queue.length).toBe(2);
+  });
+
+  it('never repeats a queued problem when the eligible local pool is exhausted', () => {
+    const bandProblems = CODEFORCES_PROBLEMS.filter((problem) => problem.clistBand === COMMANDER_CONFIG.codeforces.clistBand);
+    const remainingKeys = new Set(bandProblems.slice(0, 2).map(problemKey));
+    const initiallySolved = new Set(bandProblems.filter((problem) => !remainingKeys.has(problemKey(problem))).map(problemKey));
+    const queue = new SharedCodeforcesQueue(['player-a'], [initiallySolved]);
+
+    const first = problemKey(queue.getOrCreateProblem(0));
+    const second = problemKey(queue.getOrCreateProblem(1));
+    expect(first).not.toBe(second);
+    expect(() => queue.getOrCreateProblem(2)).toThrow('No unsolved Codeforces problem');
   });
 });
 

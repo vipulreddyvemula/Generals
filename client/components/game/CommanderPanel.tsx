@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useMemo, useState } from 'react';
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Button,
@@ -48,12 +48,20 @@ type ResultBanner = {
 type CfStatus =
   | 'AVAILABLE'
   | 'ASSIGNING'
+  | 'PREPARING QUEUE'
   | 'WAITING FOR SUBMISSION'
   | 'VERIFYING'
   | 'ACCEPTED'
   | 'NOT ACCEPTED'
   | 'EXPIRED'
   | 'ERROR';
+
+interface CodeforcesQueueStatus {
+  readyPlayers: number;
+  totalPlayers: number;
+  readyPlayerIds: string[];
+  initialized: boolean;
+}
 
 interface CommanderPublicConfig {
   maxEnergy: number;
@@ -110,6 +118,12 @@ export default function CommanderPanel() {
   const [mathAnswer, setMathAnswer] = useState('');
   const [codeforcesHandle, setCodeforcesHandle] = useState('');
   const [cfStatus, setCfStatus] = useState<CfStatus>('AVAILABLE');
+  const [cfQueueStatus, setCfQueueStatus] =
+    useState<CodeforcesQueueStatus | null>(null);
+  const [cfQueueExhausted, setCfQueueExhausted] = useState(false);
+  const acceptedTransitionRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const [banner, setBanner] = useState<ResultBanner | null>(null);
   const [commanderConfig, setCommanderConfig] =
     useState<CommanderPublicConfig | null>(null);
@@ -172,9 +186,19 @@ export default function CommanderPanel() {
       }
     };
     const onCfPending = () => setCfStatus('ASSIGNING');
+    const onCfHistoryReady = () => setCfStatus('PREPARING QUEUE');
+    const onCfQueueStatus = (status: CodeforcesQueueStatus) => {
+      setCfQueueStatus(status);
+      if (!status.initialized && status.readyPlayerIds.includes(myPlayerId)) {
+        setCfStatus('PREPARING QUEUE');
+      }
+    };
     const onCfChallenge = (challenge: CodeforcesChallengeState) => {
+      if (acceptedTransitionRef.current)
+        clearTimeout(acceptedTransitionRef.current);
       setCodeforcesChallenge(challenge);
       setCfStatus('WAITING FOR SUBMISSION');
+      setCfQueueExhausted(false);
       setBanner(null);
     };
     const onVerifyPending = () => setCfStatus('VERIFYING');
@@ -190,6 +214,19 @@ export default function CommanderPanel() {
           rewardEnergy: result.rewardEnergy,
           rewardTroops: result.rewardTroops,
         });
+        if (acceptedTransitionRef.current)
+          clearTimeout(acceptedTransitionRef.current);
+        acceptedTransitionRef.current = setTimeout(() => {
+          if (result.nextChallenge) {
+            setCodeforcesChallenge(result.nextChallenge);
+            setCfStatus('WAITING FOR SUBMISSION');
+            setCfQueueExhausted(false);
+          } else {
+            setCodeforcesChallenge(null);
+            setCfStatus('ERROR');
+            setCfQueueExhausted(true);
+          }
+        }, 1400);
       } else if (result.status === 'EXPIRED') {
         setCfStatus('EXPIRED');
         setCodeforcesChallenge(null);
@@ -224,6 +261,17 @@ export default function CommanderPanel() {
           message: result.message,
         });
       }
+    };
+    const onCfQueueExhausted = ({ message }: { message: string }) => {
+      setCodeforcesChallenge(null);
+      setCfQueueExhausted(true);
+      setCfStatus('ERROR');
+      setBanner({
+        source: 'CODEFORCES',
+        tone: 'info',
+        title: 'QUEUE COMPLETE',
+        message,
+      });
     };
     const onEnergy = ({ energy: nextEnergy }: { energy: number }) =>
       setEnergy(nextEnergy);
@@ -297,7 +345,10 @@ export default function CommanderPanel() {
     socket.on('math_challenge', onMathChallenge);
     socket.on('math_result', onMathResult);
     socket.on('codeforces_challenge_pending', onCfPending);
+    socket.on('codeforces_history_ready', onCfHistoryReady);
+    socket.on('codeforces_queue_status', onCfQueueStatus);
     socket.on('codeforces_challenge', onCfChallenge);
+    socket.on('codeforces_queue_exhausted', onCfQueueExhausted);
     socket.on('codeforces_verification_pending', onVerifyPending);
     socket.on('codeforces_verification_result', onVerifyResult);
     socket.on('energy_update', onEnergy);
@@ -307,11 +358,15 @@ export default function CommanderPanel() {
     socket.on('ability_activated', onAbilityActivated);
     socket.on('ability_failed', onAbilityFailed);
     socket.emit('get_commander_config');
+    socket.emit('get_codeforces_queue_status');
     return () => {
       socket.off('math_challenge', onMathChallenge);
       socket.off('math_result', onMathResult);
       socket.off('codeforces_challenge_pending', onCfPending);
+      socket.off('codeforces_history_ready', onCfHistoryReady);
+      socket.off('codeforces_queue_status', onCfQueueStatus);
       socket.off('codeforces_challenge', onCfChallenge);
+      socket.off('codeforces_queue_exhausted', onCfQueueExhausted);
       socket.off('codeforces_verification_pending', onVerifyPending);
       socket.off('codeforces_verification_result', onVerifyResult);
       socket.off('energy_update', onEnergy);
@@ -320,8 +375,10 @@ export default function CommanderPanel() {
       socket.off('challenge_expired', onExpired);
       socket.off('ability_activated', onAbilityActivated);
       socket.off('ability_failed', onAbilityFailed);
+      if (acceptedTransitionRef.current)
+        clearTimeout(acceptedTransitionRef.current);
     };
-  }, [socketRef, setActiveAbility]);
+  }, [socketRef, setActiveAbility, myPlayerId]);
 
   const requestMath = () => socketRef.current?.emit('request_math_challenge');
   const submitMath = (event: FormEvent) => {
@@ -335,6 +392,7 @@ export default function CommanderPanel() {
   };
   const requestCodeforces = () => {
     setCfStatus('ASSIGNING');
+    setCfQueueExhausted(false);
     socketRef.current?.emit('request_codeforces_challenge', {
       handle: codeforcesHandle.trim(),
     });
@@ -350,6 +408,7 @@ export default function CommanderPanel() {
     socketRef.current?.emit('verify_codeforces_solution', {
       contestId: codeforcesChallenge.contestId,
       problemIndex: codeforcesChallenge.problemIndex,
+      queuePosition: codeforcesChallenge.queuePosition,
     });
   };
   const openCodeforces = () => {
@@ -377,7 +436,9 @@ export default function CommanderPanel() {
       : banner?.tone === 'error'
         ? '#ff6b7a'
         : '#51d9ff';
-
+  const cfPlayerReady = Boolean(
+    cfQueueStatus?.readyPlayerIds.includes(myPlayerId)
+  );
   return (
     <Box
       sx={{
@@ -693,6 +754,7 @@ export default function CommanderPanel() {
                   <Typography
                     sx={{ fontSize: 9, color: 'rgba(231,242,252,.5)' }}
                   >
+                    QUEUE #{codeforcesChallenge.queuePosition + 1} ·{' '}
                     {codeforcesChallenge.difficulty.replace('_', ' ')} · CF{' '}
                     {codeforcesChallenge.rating}
                     {typeof codeforcesChallenge.clistRating === 'number' &&
@@ -803,50 +865,86 @@ export default function CommanderPanel() {
                       : 'HIGH REWARD'}
                   </Typography>
                 </Box>
-                <Box sx={{ display: 'flex', gap: 0.7 }}>
-                  <TextField
-                    value={codeforcesHandle}
-                    onChange={(event) =>
-                      setCodeforcesHandle(event.target.value)
-                    }
-                    placeholder='CODEFORCES HANDLE'
-                    size='small'
-                    fullWidth
-                    inputProps={{
-                      'aria-label': 'Codeforces handle',
-                      maxLength: 24,
-                    }}
+                {cfQueueStatus && !cfQueueStatus.initialized && (
+                  <Typography
                     sx={{
-                      '& .MuiOutlinedInput-root': {
-                        height: 34,
-                        color: '#fff',
-                        fontSize: 11,
-                        bgcolor: 'rgba(0,0,0,.18)',
-                        '& fieldset': { borderColor: 'rgba(47,230,166,.22)' },
-                      },
-                    }}
-                  />
-                  <Button
-                    onClick={requestCodeforces}
-                    disabled={
-                      cfStatus === 'ASSIGNING' ||
-                      codeforcesHandle.trim().length < 3
-                    }
-                    sx={{
-                      minWidth: 76,
-                      color: '#5ef0b5',
-                      border: '1px solid rgba(47,230,166,.34)',
                       fontSize: 9,
-                      fontWeight: 900,
+                      color: cfPlayerReady ? '#5ef0b5' : '#83e8ff',
+                      mb: 0.7,
+                      letterSpacing: 0.4,
                     }}
                   >
-                    {cfStatus === 'ASSIGNING' ? (
-                      <CircularProgress size={14} color='inherit' />
-                    ) : (
-                      'ASSIGN'
-                    )}
-                  </Button>
-                </Box>
+                    SHARED GRID QUEUE · {cfQueueStatus.readyPlayers}/
+                    {cfQueueStatus.totalPlayers} HISTORIES READY
+                  </Typography>
+                )}
+                {cfQueueExhausted ? (
+                  <Typography
+                    sx={{
+                      fontSize: 10,
+                      color: 'rgba(231,242,252,.62)',
+                      border: '1px solid rgba(47,230,166,.16)',
+                      px: 1,
+                      py: 0.8,
+                    }}
+                  >
+                    No more eligible shared problems remain in this band.
+                  </Typography>
+                ) : (
+                  <Box sx={{ display: 'flex', gap: 0.7 }}>
+                    <TextField
+                      value={codeforcesHandle}
+                      onChange={(event) =>
+                        setCodeforcesHandle(event.target.value)
+                      }
+                      placeholder='CODEFORCES HANDLE'
+                      size='small'
+                      fullWidth
+                      disabled={
+                        cfPlayerReady || Boolean(cfQueueStatus?.initialized)
+                      }
+                      inputProps={{
+                        'aria-label': 'Codeforces handle',
+                        maxLength: 24,
+                      }}
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          height: 34,
+                          color: '#fff',
+                          fontSize: 11,
+                          bgcolor: 'rgba(0,0,0,.18)',
+                          '& fieldset': {
+                            borderColor: 'rgba(47,230,166,.22)',
+                          },
+                        },
+                      }}
+                    />
+                    <Button
+                      onClick={requestCodeforces}
+                      disabled={
+                        cfStatus === 'ASSIGNING' ||
+                        cfPlayerReady ||
+                        Boolean(cfQueueStatus?.initialized) ||
+                        codeforcesHandle.trim().length < 3
+                      }
+                      sx={{
+                        minWidth: 82,
+                        color: '#5ef0b5',
+                        border: '1px solid rgba(47,230,166,.34)',
+                        fontSize: 9,
+                        fontWeight: 900,
+                      }}
+                    >
+                      {cfStatus === 'ASSIGNING' ? (
+                        <CircularProgress size={14} color='inherit' />
+                      ) : cfPlayerReady ? (
+                        'SYNCED'
+                      ) : (
+                        'SYNC HANDLE'
+                      )}
+                    </Button>
+                  </Box>
+                )}
               </>
             )}
           </Box>

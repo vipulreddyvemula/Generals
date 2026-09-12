@@ -4,6 +4,11 @@ import { UserData, TileType, AbilityState, ChallengeState, CodeforcesChallengeSt
 import { MaxTeamNum } from './constants';
 
 class Player {
+  /** Server-only reconnect credential and grace timer state. */
+  public sessionTokenHash = '';
+  public disconnectGraceExpiresAt: number | null = null;
+  public disconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor(
     public id: string,
     public socket_id: string,
@@ -29,8 +34,8 @@ class Player {
     public codeforcesHandle: string = '',
     public codeforcesSolvedSet: Set<string> = new Set<string>(),
     public codeforcesSolvedSetReady: boolean = false,
+    public codeforcesHistoryLoading: boolean = false,
     public rewardedCodeforcesSubmissionIds: number[] = [],
-    public lastCodeforcesChallengeAt: number = 0,
     public lastCodeforcesVerificationAt: number = 0,
 
     // Commander Effects
@@ -57,7 +62,11 @@ class Player {
       king,
       patchView,
       activeChallenge,
+      sessionTokenHash,
+      disconnectGraceExpiresAt,
+      disconnectTimer,
       codeforcesSolvedSet,
+      codeforcesHistoryLoading,
       rewardedCodeforcesSubmissionIds,
       lastCodeforcesVerificationAt,
       ...json
@@ -90,8 +99,8 @@ class Player {
     this.activeCodeforcesChallenge = null;
     this.codeforcesSolvedSet = new Set<string>();
     this.codeforcesSolvedSetReady = false;
+    this.codeforcesHistoryLoading = false;
     this.rewardedCodeforcesSubmissionIds = [];
-    this.lastCodeforcesChallengeAt = 0;
     this.lastCodeforcesVerificationAt = 0;
     this.challengeCooldownUntilTurn = 0;
     this.scoutedTiles = {};

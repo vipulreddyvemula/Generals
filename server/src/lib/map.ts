@@ -377,7 +377,7 @@ class GameMap {
               if (this.withinMap(pt)) {
                 const block = this.getBlock(pt);
                 if (block.player && block.player.team !== effect.player.team) {
-                  block.unit = Math.floor(block.unit / 2);
+                  block.unit = Math.max(0, Math.floor(block.unit / 2));
                 }
               }
             }
@@ -406,8 +406,9 @@ class GameMap {
             break;
           case TileType.Swamp:
             if (this.map[i][j].player && this.turn % 2 === 0)
-              --this.map[i][j].unit;
-            if (this.map[i][j].unit === 0) {
+              this.map[i][j].unit = Math.max(0, this.map[i][j].unit - 1);
+            if (this.map[i][j].unit <= 0) {
+              this.map[i][j].unit = 0;
               if (this.map[i][j].player) {
                 this.map[i][j].player.loseLand(this.map[i][j]);
               }
@@ -422,10 +423,15 @@ class GameMap {
   }
 
   commendable(player: any, focus: Point, newFocus: Point): boolean {
-    const isOwner = this.ownBlock(player, focus);
     const possibleMove = this.withinMap(focus) && this.withinMap(newFocus);
+    if (!possibleMove) return false;
+    if (![focus.x, focus.y, newFocus.x, newFocus.y].every(Number.isInteger))
+      return false;
+    const isOwner = this.ownBlock(player, focus);
+    const orthogonallyAdjacent =
+      Math.abs(focus.x - newFocus.x) + Math.abs(focus.y - newFocus.y) === 1;
     const notMountain = this.getBlock(newFocus).type !== TileType.Mountain;
-    return isOwner && possibleMove && notMountain;
+    return isOwner && orthogonallyAdjacent && notMountain;
   }
 
   moveAllMovableUnit(player: any, focus: Point, newFocus: Point): void {

@@ -5,6 +5,7 @@ import MapDiff from './map-diff';
 import GameRecord from './game-record';
 import { COMMANDER_CONFIG, MathDifficulty } from './commander/config';
 import type { CodeforcesDifficulty } from './commander/codeforces-catalogue';
+import type SharedCodeforcesQueue from './commander/shared-codeforces-queue';
 
 export { Point, Player, GameMap, MapDiff };
 
@@ -45,6 +46,7 @@ export interface ChallengeState {
 
 export interface CodeforcesChallengeState {
   id: string;
+  queuePosition: number;
   contestId: number;
   problemIndex: string;
   problemName: string;
@@ -58,7 +60,6 @@ export interface CodeforcesChallengeState {
   rewardEnergy: number;
   rewardTroops: number;
   challengeIssuedAt: number;
-  expiresAt: number;
   rewarded: boolean;
   verificationInProgress: boolean;
 }
@@ -120,6 +121,9 @@ export class Message {
 }
 
 export class Room {
+  /** Server-only room challenge queue; excluded from serialized room updates. */
+  public codeforcesQueue: SharedCodeforcesQueue | null = null;
+
   constructor(
     public id: string,
     public roomName: string = 'Untitled',
@@ -179,7 +183,7 @@ export class Room {
   }
 
   toJSON() {
-    const { gameLoop, generals, ...json } = this;
+    const { gameLoop, generals, codeforcesQueue, ...json } = this;
     return json;
   }
 }

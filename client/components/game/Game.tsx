@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import SurrenderDialog from './SurrenderDialog';
 import GameMap from './GameMap';
 import LeaderBoard from './LeaderBoard';
@@ -9,19 +9,30 @@ import { Box } from '@mui/material';
 import { useGame, useGameDispatch } from '@/context/GameContext';
 
 export default function Game() {
-  const { room, socketRef, myPlayerId, turnsCount, leaderBoardData } =
-    useGame();
+  const { room, socketRef, turnsCount, leaderBoardData } = useGame();
   const { setOpenOverDialog, setDialogContent, setIsSurrendered } =
     useGameDispatch();
   const [isSurrenderDialogOpen, setSurrenderDialogOpen] = useState(false);
 
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket) return;
+    const onSurrenderResult = (result: { status: string }) => {
+      if (result.status !== 'ACCEPTED') return;
+      setIsSurrendered(true);
+      setDialogContent([[null], 'game_surrender', null]);
+      setOpenOverDialog(true);
+    };
+    socket.on('surrender_result', onSurrenderResult);
+    return () => {
+      socket.off('surrender_result', onSurrenderResult);
+    };
+  }, [setDialogContent, setIsSurrendered, setOpenOverDialog, socketRef]);
+
   const handleReturnClick = () => setSurrenderDialogOpen(true);
 
   const handleSurrender = () => {
-    socketRef.current.emit('surrender', myPlayerId);
-    setIsSurrendered(true);
-    setDialogContent([[null], 'game_surrender', null]);
-    setOpenOverDialog(true);
+    socketRef.current.emit('surrender');
   };
 
   return (
