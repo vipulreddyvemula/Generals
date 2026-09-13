@@ -13,7 +13,7 @@ Gennia is a real-time multiplayer strategy game server and client, inspired by g
 ```
 ├── client/          # Next.js frontend application
 │   ├── pages/       # Next.js pages (_app.tsx, index.tsx, rooms/[roomId].tsx, etc.)
-│   ├── components/  # React components (GameRoom, GameMap, MapEditor, Lobby, etc.)
+│   ├── components/  # React components (GameRoom, GameMap, Lobby, etc.)
 │   └── public/      # Static assets
 ├── server/          # Express + Socket.io backend
 │   ├── src/
@@ -27,7 +27,7 @@ Gennia is a real-time multiplayer strategy game server and client, inspired by g
 │   │       ├── map-diff.ts  # MapDiff for efficient updates
 │   │       └── game-record.ts # Game replay recording
 │   └── prisma/
-│       └── schema.prisma    # Database schema for custom maps
+│       └── schema.prisma    # Prisma datasource configuration
 └── Makefile         # Deployment and setup commands
 ```
 
@@ -51,7 +51,6 @@ pnpm install
 pnpm run dev          # Start dev server with nodemon
 pnpm run build        # Compile TypeScript
 pnpm start            # Run compiled JavaScript
-pnpm run generate     # Generate Prisma client
 ```
 
 ### Database (PostgreSQL + Prisma)
@@ -59,7 +58,6 @@ pnpm run generate     # Generate Prisma client
 - Start PostgreSQL: `docker-compose up -d` (in server directory)
 - Database commands:
   ```bash
-  npx prisma generate        # Generate Prisma client after schema changes
   npx prisma migrate dev     # Run migrations
   pnpm dlx prisma studio     # Open database UI
   ```
@@ -111,23 +109,13 @@ make restart           # Restart services after changes
 - `captured`: Broadcast when a player's general is captured
 - `room_message`: Chat messages
 
-### Database Schema
-
-Two models in Prisma:
-- **CustomMapData**: User-created maps with `mapTilesData` (JSON string), views, starCount
-- **StarUsers**: Junction table for user favorites (userId, mapId)
-
 ### API Endpoints (server.ts)
 
 - `GET /ping`: Health check
 - `GET /get_rooms`: List all active rooms
 - `GET /create_room`: Create new room
 - `GET /get_replay/:replayId`: Fetch replay JSON
-- `GET /maps`, `POST /maps`, `GET /maps/:id`, `PUT /maps/:id`, `DELETE /maps/:id`: CRUD for custom maps
-- `GET /new`, `GET /best`, `GET /hot`: Get maps sorted by recency, stars, views
-- `GET /search?q=`: Search maps by name or ID
-- `POST /toggleStar`: Star/unstar a map
-- `GET /starredMaps?userId=`: Get user's starred maps
+- `GET /health`: In-process event and room diagnostics
 
 ## Testing & Building
 
@@ -144,5 +132,5 @@ Two models in Prisma:
 - **Pre-configured rooms**: `roomPool` has default rooms ('1' for bots, 'warring_state' for special mode)
 - **Force start mechanism**: Players vote to start; when threshold reached (`forceStartOK`), game begins
 - **Team system**: Supports multiple teams (MaxTeamNum), players on same team share victory
-- **Map generation**: Random maps generated based on room settings (mapWidth, mapHeight, mountain, city density) or custom maps loaded from database
+- **Map generation**: Random maps generated based on room settings (mapWidth, mapHeight, mountain, city density)
 - **Domain**: Current production domain is gennia.online (previously gennia.io)

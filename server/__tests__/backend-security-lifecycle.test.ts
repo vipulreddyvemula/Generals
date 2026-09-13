@@ -299,7 +299,6 @@ describe('room creation, settings, and supported capacity', () => {
     room.players = [host, guest];
     expect(ROOM_SETTING_KEYS).toEqual([
       'roomName',
-      'mapId',
       'maxPlayers',
       'gameSpeed',
       'mapWidth',

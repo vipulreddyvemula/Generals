@@ -1,7 +1,7 @@
 import Block from './block';
 import Point from './point';
 import Player from './player';
-import { TileType, CustomMapData } from './types';
+import { TileType } from './types';
 
 const directions = [
   new Point(-1, -1),
@@ -187,58 +187,6 @@ class GameMap {
         attempts++;
       }
     }
-  }
-
-  static from_custom_map(customMapData: CustomMapData, players: Player[], revealKing: boolean): GameMap {
-    const { id, name, width, height, mapTilesData } = customMapData;
-    let map = new GameMap(id, name, width, height, 0, 0, 0, players, revealKing);
-
-    // Initialize the map's blocks from the custom map data
-    for (let i = 0; i < width; i++) {
-      for (let j = 0; j < height; j++) {
-        const [tileType, team, unitsCount, isAlwaysRevealed, priority] = mapTilesData[i][j];
-        map.map[i][j] = new Block(i, j, tileType, unitsCount, null, isAlwaysRevealed, priority);
-      }
-    }
-
-    let kings = [];
-    for (let i = 0; i < width; i++) {
-      for (let j = 0; j < height; j++) {
-        let tileType = mapTilesData[i][j][0]
-        if (map.map[i][j].type === TileType.King) {
-          kings.push(map.map[i][j])
-        }
-      }
-    }
-
-    // sort by priority, if priority is same, randomly select
-    kings.sort((a, b) => {
-      if (a.priority === b.priority) {
-        return Math.random() - 0.5;
-      }
-      return a.priority - b.priority
-    });
-
-    // Assign kings to players who is not spectating
-    for (let i = 0; i < players.length; i++) {
-      if (i < kings.length) {
-        if (players[i].spectating()) continue;
-        kings[i].initKing(players[i]);
-        if (map.revealKing) kings[i].isAlwaysRevealed = true;
-        players[i].initKing(kings[i]);
-      }
-    }
-    // reset kings that not own by players to plain
-    for (let i = 0; i < kings.length; i++) {
-      if (!kings[i].player)
-        kings[i].setType(TileType.Plain);
-    }
-
-    // random assign kings to other players
-    if (players.length > kings.length)
-      map.assign_random_king();
-
-    return map;
   }
 
   generate(): void {

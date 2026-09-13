@@ -57,7 +57,6 @@ Your goal is to capture other generals.
 
 ### Basic
 
-- [x] Create Custom Map
 - [x] [Game Bot](https://github.com/GenniaApp/GenniaBot)
 - [x] Replays
 - [x] Mobile Support (Drag to attack)
@@ -92,10 +91,9 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 We use postgresql + prisma
 
 - see `.env.example` to config prisma env correctly
-- if you init repo or edit prisma schema, run `pnpx prisma migrate dev` to make sure update schema in database and update prisma client
+- if you init the repo or update a migration, run `pnpx prisma migrate dev` to apply the database schema
 
 ```
-npx prisma generate # generate prisma client code
 npx prisma migrate dev # migrate
 pnpm dlx prisma studio # open databaseUI
 ```

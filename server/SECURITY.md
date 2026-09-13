@@ -18,4 +18,4 @@ All zero-team and one-team terminal outcomes use the same idempotent finish path
 
 ## Host settings
 
-Only the current authenticated host may change settings, and only before match start. The explicit allowlist is: `roomName`, `mapId`, `maxPlayers`, `gameSpeed`, `mapWidth`, `mapHeight`, `mountain`, `city`, `swamp`, `fogOfWar`, `revealKing`, `warringStatesMode`, and `deathSpectator`. Each setting is type- and range-validated before an explicit assignment. Internal room state is never assignable through this event.
+Only the current authenticated host may change settings, and only before match start. The explicit allowlist is: `roomName`, `maxPlayers`, `gameSpeed`, `mapWidth`, `mapHeight`, `mountain`, `city`, `swamp`, `fogOfWar`, `revealKing`, `warringStatesMode`, and `deathSpectator`. Each setting is type- and range-validated before an explicit assignment. Internal room state is never assignable through this event.

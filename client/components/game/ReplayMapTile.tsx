@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import Image from 'next/image';
 import {
   TileType,
-  DisplayCustomMapTileData,
+  ReplayTileData,
   TileType2Image,
 } from '@/lib/types';
 import { ColorArr } from '@/lib/constants';
@@ -16,10 +16,10 @@ import {
   blankFill,
 } from '@/lib/constants';
 
-interface CustomMapTileProps {
+interface ReplayMapTileProps {
   zoom: number;
   size: number;
-  tile: DisplayCustomMapTileData;
+  tile: ReplayTileData;
   x: number;
   y: number;
   handleClick?: any;
@@ -27,7 +27,7 @@ interface CustomMapTileProps {
   fontSize?: number;
 }
 
-export default React.memo(function CustomMapTile(props: CustomMapTileProps) {
+export default React.memo(function ReplayMapTile(props: ReplayMapTileProps) {
   const {
     zoom,
     size,

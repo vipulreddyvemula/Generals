@@ -1,14 +1,14 @@
-import { ColorArr, forceStartOK, MaxTeamNum, SpeedOptions } from './constants';
+import { MaxTeamNum, SpeedOptions } from './constants';
 import { neutralizePlayer } from './lifecycle';
 import Player from './player';
 import Point from './point';
 import { Room } from './types';
+import { EVENT_LIMITS } from './event-limits';
 
-export const MAX_SUPPORTED_PLAYERS = Math.min(ColorArr.length - 1, MaxTeamNum, forceStartOK.length - 1);
+export const MAX_SUPPORTED_PLAYERS = EVENT_LIMITS.maxPlayersPerRoom;
 
 export const ROOM_SETTING_KEYS = [
   'roomName',
-  'mapId',
   'maxPlayers',
   'gameSpeed',
   'mapWidth',
@@ -90,10 +90,6 @@ export function validateRoomSetting(room: Room, property: string, value: unknown
         ? { ok: true, value: roomName }
         : { ok: false, code: 'INVALID_VALUE', message: 'Room name must contain 1–20 characters.' };
     }
-    case 'mapId':
-      return typeof value === 'string' && /^[A-Za-z0-9_-]{0,50}$/.test(value)
-        ? { ok: true, value }
-        : { ok: false, code: 'INVALID_VALUE', message: 'Map ID is invalid.' };
     case 'maxPlayers':
       return typeof value === 'number' &&
         Number.isInteger(value) &&
@@ -156,7 +152,6 @@ export function authorizeRoomSettingForSocket(
 export function applyRoomSetting(room: Room, property: RoomSettingKey, value: RoomSettingValue): void {
   switch (property) {
     case 'roomName':
-    case 'mapId':
       room[property] = value as string;
       break;
     case 'maxPlayers':

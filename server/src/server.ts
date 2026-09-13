@@ -7,14 +7,16 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
-import { PrismaClient } from '@prisma/client';
 
 import { ColorArr, MaxTeamNum, ReconnectGraceMs, forceStartOK } from './lib/constants';
 import { roomPool, createRoom } from './lib/room-pool';
+import { canJoinRoom } from './lib/event-limits';
+import { resetRoomRuntime, runRoomTick, startRoomOnce } from './lib/room-runtime';
+import { eventMetrics } from './lib/observability';
+import { SESSION_CLAIM_POLICY, SESSION_IP_POLICY, SOCKET_EVENT_POLICIES, SocketRateLimiter } from './lib/socket-rate-limit';
 import {
   Room,
   initGameInfo,
-  CustomMapData,
   MapDiffData,
   LeaderBoardTable,
   LeaderBoardRow,
@@ -47,7 +49,6 @@ import {
   authorizeRoomSettingForSocket,
   changeTeamForSocket,
   isOrthogonalMove,
-  MAX_SUPPORTED_PLAYERS,
   resolveSocketPlayer,
   surrenderForSocket,
 } from './lib/security';
@@ -59,7 +60,6 @@ if (!process.env.CLIENT_URL || !process.env.PORT) {
   throw new Error('Please fill in `CLIENT_URL` and `PORT`.');
 }
 
-const prisma = new PrismaClient();
 const app = express();
 const cors_urls = process.env.CLIENT_URL == '*' ? '*' : process.env.CLIENT_URL.split(' ');
 console.log(cors_urls);
@@ -104,210 +104,6 @@ app.get('/get_replay/:replayId', async (req: Request, res: Response) => {
   });
 });
 
-app.get('/maps', async (req, res) => {
-  const maps = await prisma.customMapData.findMany({
-    select: {
-      id: true,
-      name: true,
-      width: true,
-      height: true,
-      creator: true,
-      description: true,
-      createdAt: true,
-      views: true,
-      starCount: true,
-    },
-  });
-  res.json(maps);
-});
-
-app.post('/maps', async (req, res) => {
-  try {
-    await prisma.customMapData.create({
-      data: {
-        ...req.body,
-        mapTilesData: JSON.stringify(req.body.mapTilesData),
-      },
-    });
-    res.json({ success: true });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false });
-  }
-});
-
-app.get('/maps/:id', async (req, res) => {
-  const map = await prisma.customMapData.findUnique({
-    where: { id: req.params.id },
-  });
-  if (!map) return res.status(404).end(); // Not Found
-  await prisma.customMapData.update({
-    where: { id: req.params.id },
-    data: {
-      views: {
-        increment: 1,
-      },
-    },
-  });
-  map.mapTilesData = JSON.parse(map.mapTilesData);
-  res.json(map);
-});
-
-app.put('/maps/:id', async (req, res) => {
-  const updatedMap = await prisma.customMapData.update({
-    where: { id: req.params.id },
-    data: {
-      ...req.body,
-      mapTilesData: JSON.stringify(req.body.mapTilesData),
-    },
-  });
-  res.json(updatedMap);
-});
-
-app.delete('/maps/:id', async (req, res) => {
-  const deletedMap = await prisma.customMapData.delete({
-    where: { id: req.params.id },
-  });
-  res.json(deletedMap);
-});
-
-app.get('/new', async (req, res) => {
-  const newestMaps = await prisma.customMapData.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: 25,
-    select: {
-      id: true,
-      name: true,
-      width: true,
-      height: true,
-      creator: true,
-      description: true,
-      createdAt: true,
-      views: true,
-      starCount: true,
-    },
-  });
-  res.json(newestMaps);
-});
-
-app.get('/best', async (req, res) => {
-  const bestMaps = await prisma.customMapData.findMany({
-    orderBy: { starCount: 'desc' },
-    take: 25,
-    select: {
-      id: true,
-      name: true,
-      width: true,
-      height: true,
-      creator: true,
-      description: true,
-      createdAt: true,
-      views: true,
-      starCount: true,
-    },
-  });
-  res.json(bestMaps);
-});
-
-app.get('/hot', async (req, res) => {
-  const hotMaps = await prisma.customMapData.findMany({
-    orderBy: { views: 'desc' },
-    take: 25,
-    select: {
-      id: true,
-      name: true,
-      width: true,
-      height: true,
-      creator: true,
-      description: true,
-      createdAt: true,
-      views: true,
-      starCount: true,
-    },
-  });
-  res.json(hotMaps);
-});
-
-app.get('/search', async (req: Request, res: Response) => {
-  const searchTerm = req.query.q;
-
-  if (typeof searchTerm !== 'string') {
-    res.status(400).json({ error: 'Invalid query parameter' });
-    return;
-  }
-
-  const searchedMaps = await prisma.customMapData.findMany({
-    where: {
-      OR: [{ name: { contains: searchTerm } }, { id: { equals: searchTerm } }],
-    },
-    select: {
-      id: true,
-      name: true,
-      width: true,
-      height: true,
-      creator: true,
-      description: true,
-      createdAt: true,
-      views: true,
-      starCount: true,
-    },
-  });
-  res.json(searchedMaps);
-});
-
-app.post('/toggleStar', async (req: Request, res: Response) => {
-  const { userId, mapId, action } = req.body;
-
-  if (action !== 'increase' && action !== 'decrease') {
-    res.status(400).json({ error: 'Invalid action' });
-    return;
-  }
-
-  const existingStar = await prisma.starUsers.findUnique({
-    where: { userId_mapId: { userId, mapId } },
-  });
-
-  if (action === 'increase') {
-    if (existingStar) {
-      res.status(400).json({ error: 'You have already starred this map' });
-      return;
-    }
-
-    await prisma.$transaction([
-      prisma.starUsers.create({ data: { userId, mapId } }),
-      prisma.customMapData.update({ where: { id: mapId }, data: { starCount: { increment: 1 } } }),
-    ]);
-  } else {
-    if (!existingStar) {
-      res.status(400).json({ error: 'You have not starred this map yet' });
-      return;
-    }
-
-    await prisma.$transaction([
-      prisma.starUsers.delete({ where: { userId_mapId: { userId, mapId } } }),
-      prisma.customMapData.update({ where: { id: mapId }, data: { starCount: { decrement: 1 } } }),
-    ]);
-  }
-
-  res.json({ success: true });
-});
-
-app.get('/starredMaps', async (req, res) => {
-  const userId = req.query.userId as string;
-
-  if (!userId) {
-    res.status(400).json({ error: 'User ID is required' });
-    return;
-  }
-
-  const starredMaps = await prisma.starUsers.findMany({
-    where: { userId },
-    select: { mapId: true },
-  });
-
-  res.json(starredMaps.map((starUsers) => starUsers.mapId));
-});
-
 const server = app.listen(process.env.PORT, () => {
   console.log(`Application started on port ${process.env.PORT}!`);
 });
@@ -316,6 +112,49 @@ const io = new Server(server, {
   cors: {
     origin: cors_urls,
   },
+});
+
+const socketRateLimiter = new SocketRateLimiter();
+io.use((socket, next) => {
+  const ip = socket.handshake.address;
+  const claim = socket.handshake.auth?.playerId;
+  if (!socketRateLimiter.allow(`ip:${ip}`, 'connect', SESSION_IP_POLICY)) {
+    next(new Error('Too many connection attempts. Please retry shortly.'));
+    return;
+  }
+  if (typeof claim === 'string' && claim && !socketRateLimiter.allow(`claim:${ip}:${claim}`, 'reconnect', SESSION_CLAIM_POLICY)) {
+    next(new Error('Too many reconnect attempts. Please retry shortly.'));
+    return;
+  }
+  next();
+});
+
+io.engine.on('connection', (connection) => {
+  connection.on('packet', (packet) => {
+    const data = packet.data;
+    eventMetrics.recordBytes('in', typeof data === 'string' ? Buffer.byteLength(data) : Buffer.isBuffer(data) ? data.length : 0);
+  });
+  connection.on('packetCreate', (packet) => {
+    const data = packet.data;
+    eventMetrics.recordBytes('out', typeof data === 'string' ? Buffer.byteLength(data) : Buffer.isBuffer(data) ? data.length : 0);
+  });
+});
+
+let nextLagCheckAt = Date.now() + 1000;
+const lagTimer = setInterval(() => {
+  const now = Date.now();
+  eventMetrics.eventLoopLagMs = Math.max(0, now - nextLagCheckAt);
+  nextLagCheckAt = now + 1000;
+}, 1000);
+lagTimer.unref();
+
+const metricsTimer = setInterval(() => {
+  console.info(JSON.stringify(eventMetrics.snapshot(roomPool, io.sockets.sockets.size)));
+}, 15_000);
+metricsTimer.unref();
+
+app.get('/health', (_req, res) => {
+  res.json(eventMetrics.snapshot(roomPool, io.sockets.sockets.size));
 });
 
 function getCodeforcesEligiblePlayers(room: Room): Player[] {
@@ -395,6 +234,8 @@ function issuePlayerSession(player: Player, socket: Socket): void {
 
 function finishGame(room: Room, io: Server, gameRecord: GameRecord): boolean {
   if (!claimGameTermination(room)) return false;
+  resetRoomRuntime(room);
+  eventMetrics.gameEnds += 1;
 
   const outcome = getGameOutcome(room);
   const winners =
@@ -466,49 +307,40 @@ async function checkForcedStart(room: Room, io: Server) {
   const forceStartNum = forceStartOK[room.players.filter((player) => !player.spectating()).length];
 
   if (!room.gameStarted && room.forceStartNum >= forceStartNum) {
-    await handleGame(room, io);
+    try {
+      await startRoomOnce(room, () => handleGame(room, io));
+    } catch (error) {
+      eventMetrics.exceptions += 1;
+      console.error('Failed to start room:', room.id, error);
+      cleanupFinishedRoom(room);
+      resetRoomRuntime(room);
+      io.in(room.id).emit('update_room', room);
+      io.in(room.id).emit('error', 'Game start failed', 'Unable to initialize this match. Please retry.');
+    }
   }
 }
 
-async function handleGame(room: Room, io: Server) {
+function handleGame(room: Room, io: Server): void {
   if (room.gameStarted === false) {
     room.codeforcesQueue = null;
     room.players.forEach((player) => {
       player.reset();
     });
 
-    if (room.mapId) {
-      const data = await prisma.customMapData.findUnique({
-        where: { id: room.mapId },
-      });
-      if (!data) {
-        throw new Error('Map not found');
-      }
-      console.log(`Start game with custom map ${room.mapId} ${data.name}`);
-
-      const customMapData = {
-        ...data,
-        mapTilesData: JSON.parse(data.mapTilesData),
-      };
-      room.map = GameMap.from_custom_map(customMapData, room.players, room.revealKing);
-    } else {
-      const actualWidth = Math.ceil(Math.sqrt(room.players.length) * 5 + 12 * room.mapWidth);
-      const actualHeight = Math.ceil(Math.sqrt(room.players.length) * 5 + 12 * room.mapHeight);
-      room.map = new GameMap(
-        'random_map_id',
-        'random_map_name',
-        actualWidth,
-        actualHeight,
-        room.mountain,
-        room.city,
-        room.swamp,
-        room.players,
-        room.revealKing
-      );
-      room.map.generate();
-
-      console.log(`Start game with random map `);
-    }
+    const actualWidth = Math.ceil(Math.sqrt(room.players.length) * 5 + 12 * room.mapWidth);
+    const actualHeight = Math.ceil(Math.sqrt(room.players.length) * 5 + 12 * room.mapHeight);
+    room.map = new GameMap(
+      'random_map_id',
+      'random_map_name',
+      actualWidth,
+      actualHeight,
+      room.mountain,
+      room.city,
+      room.swamp,
+      room.players,
+      room.revealKing
+    );
+    room.map.generate();
     room.mapGenerated = true;
     const gameMap = room.map;
     if (!gameMap) throw new Error('Game map was not initialized');
@@ -517,8 +349,6 @@ async function handleGame(room: Room, io: Server) {
     room.globalMapDiff = globalMapDiff;
     room.gameRecord = gameRecord;
 
-    // Now: Client can get map name / width / height !
-    // todo 对于自定义地图，地图名称应该在游戏开始前获知，而不是开始时
     console.info(`Start game`);
     room.gameStarted = true;
     const intro_message = 'Chat is being recorded. Have fun!';
@@ -539,9 +369,9 @@ async function handleGame(room: Room, io: Server) {
     });
 
     const updTime = 500 / room.gameSpeed;
-    room.gameLoop = setInterval(async () => {
-      try {
-        if (!room.gameStarted) return;
+    room.gameLoop = setInterval(() => {
+      void runRoomTick(room, async (isCurrent) => {
+        if (!isCurrent()) return;
         room.players.forEach((player) => {
           if (player.activeChallenge && player.activeChallenge.expiresAtTurn <= gameMap.turn) {
             player.activeChallenge = null;
@@ -596,10 +426,10 @@ async function handleGame(room: Room, io: Server) {
           });
 
         const room_sockets = await io.in(room.id).fetchSockets();
-        if (!room.gameStarted) return;
+        if (!isCurrent()) return;
 
         for (const socket of room_sockets) {
-          if (!room.gameStarted) return;
+          if (!isCurrent()) return;
           const playerIndex = getPlayerIndexBySocket(room, socket.id);
           const viewPlayer = room.players[playerIndex];
           const patchView = viewPlayer?.patchView;
@@ -609,22 +439,23 @@ async function handleGame(room: Room, io: Server) {
             } else {
               await patchView.patch(await gameMap.getViewPlayer(viewPlayer));
             }
+            if (!isCurrent()) return;
             socket.emit('game_update', patchView.data, gameMap.turn, leaderBoardData);
           }
         }
 
         await globalMapDiff.patch(gameMap.map);
-        if (!room.gameStarted) return;
+        if (!isCurrent()) return;
         gameRecord.addGameUpdate(globalMapDiff.data, gameMap.turn, leaderBoardData);
         gameMap.updateTurn();
         gameMap.updateUnit();
 
         const outcome = getGameOutcome(room);
         if (outcome.terminal) finishGame(room, io, gameRecord);
-      } catch (e: any) {
-        console.error(JSON.stringify(e, ['message', 'arguments', 'type', 'name']));
-        console.log(e.stack);
-      }
+      }).catch((error) => {
+        eventMetrics.exceptions += 1;
+        console.error('Room tick failed:', room.id, error);
+      });
     }, updTime);
   }
 }
@@ -709,6 +540,7 @@ io.on('connection', async (socket) => {
 
     player = reconnectingPlayer;
     restoreConnectedPlayer(player, socket.id);
+    eventMetrics.reconnects += 1;
     socket.join(room.id);
     issuePlayerSession(player, socket);
     io.in(room.id).emit('room_message', player.minify(), 'reconnected.');
@@ -730,7 +562,7 @@ io.on('connection', async (socket) => {
       player.patchView = new MapDiff();
     }
   } else {
-    if (room.players.length >= room.maxPlayers || room.players.length >= MAX_SUPPORTED_PLAYERS) {
+    if (!canJoinRoom(roomPool, room)) {
       reject_join(socket, 'The room is full.');
       return;
     }
@@ -799,6 +631,25 @@ io.on('connection', async (socket) => {
   // ====================================
   // set up socket event listeners
   // ====================================
+
+  socket.use(([event], next) => {
+    eventMetrics.recordEvent();
+    const policy = SOCKET_EVENT_POLICIES[event];
+    if (!policy) {
+      next();
+      return;
+    }
+    if (resolveSocketPlayer(room, socket.id) !== player) {
+      socket.emit('error', 'Session expired', 'This socket no longer owns the player session.');
+      return;
+    }
+    if (!socketRateLimiter.allow(`player:${room.id}:${player.id}`, event, policy)) {
+      const message = 'Too many requests. Please wait and try again.';
+      socket.emit('error', 'Rate limit', message);
+      return;
+    }
+    next();
+  });
 
   socket.on('get_room_info', async () => {
     socket.emit('update_room', room);
@@ -869,23 +720,6 @@ io.on('connection', async (socket) => {
       const { player: actingPlayer, property: settingKey } = authorization.value;
       let settingValue = authorization.value.value;
       if (settingKey === 'roomName') settingValue = xss(settingValue as string);
-      if (settingKey === 'mapId') {
-        if (settingValue === '') {
-          room.mapName = '';
-        } else {
-          const map = await prisma.customMapData.findUnique({
-            where: { id: settingValue as string },
-            select: { name: true },
-          });
-          const liveActor = resolveSocketPlayer(room, socket.id);
-          if (!map || room.gameStarted || !liveActor?.isRoomHost) {
-            socket.emit('error', 'Modification was failed', 'Map not found or room settings are locked.');
-            return;
-          }
-          room.mapName = map.name;
-        }
-      }
-
       applyRoomSetting(room, settingKey, settingValue);
       io.in(room.id).emit('update_room', room);
       io.in(room.id).emit('room_message', actingPlayer.minify(), `changed ${property}.`);
@@ -898,6 +732,10 @@ io.on('connection', async (socket) => {
   socket.on('player_message', async (message) => {
     const actingPlayer = resolveSocketPlayer(room, socket.id);
     if (!actingPlayer) return;
+    if (typeof message !== 'string' || message.length > 500) {
+      socket.emit('error', 'Invalid message', 'Messages must contain at most 500 characters.');
+      return;
+    }
     if (room.gameStarted && room.gameRecord && room.map) {
       room.gameRecord.addMessage({ turn: room.map.turn, player: actingPlayer.minify(), content: message });
     }
@@ -911,6 +749,7 @@ io.on('connection', async (socket) => {
 
   socket.on('force_start', async () => {
     try {
+      if (room.gameStarted) return;
       const actingPlayer = resolveSocketPlayer(room, socket.id);
       if (actingPlayer && !actingPlayer.spectating()) {
         if (actingPlayer.forceStart === true) {

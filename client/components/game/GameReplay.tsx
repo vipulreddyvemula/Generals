@@ -25,7 +25,7 @@ import {
   FastForwardRounded,
 } from '@mui/icons-material';
 import { mapDataReducer } from '@/context/GameReducer';
-import CustomMapTile from '@/components/game/CustomMapTile';
+import ReplayMapTile from '@/components/game/ReplayMapTile';
 import { ReplaySpeedOptions } from '@/lib/constants';
 import {
   Position,
@@ -410,7 +410,7 @@ export default function GameReplay(props: any) {
             {limitedView.map((tiles, x) => {
               return tiles.map((tile, y) => {
                 return (
-                  <CustomMapTile
+                  <ReplayMapTile
                     key={`${x}/${y}`}
                     zoom={zoom}
                     size={tileSize}

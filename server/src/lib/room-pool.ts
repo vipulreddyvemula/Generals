@@ -1,8 +1,9 @@
 import { Room, RoomPool } from './types';
+import { EVENT_LIMITS } from './event-limits';
 
 export const roomPool: RoomPool = Object.create(null);
 
-export const MAX_ROOM_COUNT = 15;
+export const MAX_ROOM_COUNT = EVENT_LIMITS.maxRooms;
 let roomCount = 0;
 
 export async function createRoom(
@@ -17,6 +18,7 @@ export async function createRoom(
       roomId = String(roomCount + 1);
     }
     const newRoom = new Room(roomId, roomName);
+    newRoom.maxPlayers = Math.min(newRoom.maxPlayers, EVENT_LIMITS.maxPlayersPerRoom);
     roomPool[roomId] = newRoom;
     return {
       success: true,
@@ -37,6 +39,7 @@ roomPool['1'] = Room.create({
   roomName: 'Bot Room',
   keepAlive: true,
 });
+roomPool['1'].maxPlayers = Math.min(roomPool['1'].maxPlayers, EVENT_LIMITS.maxPlayersPerRoom);
 
 // Warring state
 roomPool['warring_state'] = Room.create({
@@ -46,6 +49,7 @@ roomPool['warring_state'] = Room.create({
   revealKing: true,
   keepAlive: true,
 });
+roomPool['warring_state'].maxPlayers = Math.min(roomPool['warring_state'].maxPlayers, EVENT_LIMITS.maxPlayersPerRoom);
 
 // mobile
 // roomPool['mobile'] = Room.create({

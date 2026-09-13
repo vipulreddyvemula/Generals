@@ -14,16 +14,10 @@ import {
   FormGroup,
   FormControlLabel,
   Switch,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Link,
   ToggleButtonGroup,
   ToggleButton,
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import ClearIcon from '@mui/icons-material/Clear';
 import ShareIcon from '@mui/icons-material/Share';
 import TerrainIcon from '@mui/icons-material/Terrain';
 import LocationCityIcon from '@mui/icons-material/LocationCity';
@@ -34,7 +28,6 @@ import { useTranslation } from 'next-i18next';
 
 import SliderBox from './SliderBox';
 import PlayerTable from './PlayerTable';
-import MapExplorer from './game/MapExplorer';
 
 import { forceStartOK, MaxTeamNum, SpeedOptions } from '@/lib/constants';
 import { useGame, useGameDispatch } from '@/context/GameContext';
@@ -62,9 +55,8 @@ const GameSetting: React.FC<GameSettingProps> = (props) => {
   const [isNameFocused, setIsNamedFocused] = useState(false);
   const [shareLink, setShareLink] = useState('');
   const [forceStart, setForceStart] = useState(false);
-  const [openMapExplorer, setOpenMapExplorer] = useState(false);
 
-  const { room, socketRef, myPlayerId, myUserName, team } = useGame();
+  const { room, socketRef, myPlayerId, team } = useGame();
   const { roomDispatch, snackStateDispatch } = useGameDispatch();
 
   const { t } = useTranslation();
@@ -95,23 +87,6 @@ const GameSetting: React.FC<GameSettingProps> = (props) => {
 
   const handleTeamChange = (_: Event, newTeam: any) => {
     socketRef.current.emit('set_team', newTeam);
-  };
-
-  const handleOpenMapExplorer = () => {
-    setOpenMapExplorer(true);
-  };
-
-  const handleCloseMapExplorer = () => {
-    setOpenMapExplorer(false);
-  };
-
-  const clearRoomMap = () => {
-    socketRef.current.emit('change_room_setting', 'mapId', '');
-  };
-
-  const handleMapSelect = (mapId: string) => {
-    socketRef.current.emit('change_room_setting', 'mapId', mapId);
-    setOpenMapExplorer(false);
   };
 
   const handleClickForceStart = () => {
@@ -176,16 +151,6 @@ const GameSetting: React.FC<GameSettingProps> = (props) => {
         },
       }}
     >
-      <Dialog open={openMapExplorer} onClose={handleCloseMapExplorer}>
-        <DialogTitle>Choose a Map</DialogTitle>
-        <DialogContent>
-          <MapExplorer userId={myUserName} onSelect={handleMapSelect} />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseMapExplorer}>Close</Button>
-        </DialogActions>
-      </Dialog>
-
       <Card
         className='menu-container'
         sx={{
@@ -269,33 +234,6 @@ const GameSetting: React.FC<GameSettingProps> = (props) => {
               </Typography>
             </Box>
           )}
-          {room.mapName && (
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Typography
-                variant='h6'
-                color='primary'
-                sx={{ mr: 2, whiteSpace: 'nowrap' }}
-                align='center'
-                component={Link}
-                href={`/maps/${room.mapId}`}
-                target='_blank'
-                rel='noopener noreferrer'
-              >
-                {t('custom-map')}: {room.mapName}
-              </Typography>
-              {!disabled_ui && (
-                <IconButton onClick={clearRoomMap}>
-                  <ClearIcon />
-                </IconButton>
-              )}
-            </Box>
-          )}
           <Tabs
             value={tabIndex}
             onChange={(event, value) => setTabIndex(value)}
@@ -346,14 +284,6 @@ const GameSetting: React.FC<GameSettingProps> = (props) => {
           </TabPanel>
           <TabPanel value={tabIndex} index={1}>
             <Box sx={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
-              <Button
-                variant='contained'
-                disabled={disabled_ui}
-                onClick={handleOpenMapExplorer}
-              >
-                {t('select-a-custom-map')}
-              </Button>
-
               <Box
                 sx={{
                   display: 'flex',

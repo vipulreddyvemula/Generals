@@ -132,8 +132,6 @@ export class Room {
     public gameLoop: any = null, // gameLoop function
     public players: Player[] = new Array<Player>(),
     public generals: Point[] = new Array<Point>(),
-    public mapId: string = '', // custom Map id
-    public mapName: string = '', // custom map name
     public keepAlive: boolean = false, // keep alive after game over
     public revealKing: boolean = false, // reveal all king
     public warringStatesMode: boolean = false // warring states 战国 mode
@@ -161,8 +159,6 @@ export class Room {
       options.gameLoop,
       options.players,
       options.generals,
-      options.mapId,
-      options.mapName,
       options.keepAlive,
       options.revealKing,
       options.warringStatesMode
@@ -209,20 +205,12 @@ export type MapData = TilesProp[];
 
 export type MapDiffData = (number | TileProp)[]; // number: same count, TileProp: diff
 
-export type CustomMapTileData = [
-  TileType,
-  ColorIndex,
-  number, // unitsCount which is not allow set to null
-  boolean, // isAlwaysRevealed
-  number, // King Priority
-];
-
-export type DisplayCustomMapTileData = [
+export type ReplayTileData = [
   TileType,
   ColorIndex,
   DisplayUnitsCount,
-  boolean, // isAlwaysRevealed : is Always Revealed
-  number, // King Priority
+  boolean,
+  number,
 ];
 
 export interface QueueDisplayData {
@@ -256,25 +244,3 @@ export interface GameRecordPerTurn {
   data: MapDiffData;
   lead: LeaderBoardTable;
 }
-
-export type CustomMapData = {
-  id: string;
-  name: string;
-  width: number;
-  height: number;
-  creator: string;
-  description: string;
-  mapTilesData: CustomMapTileData[][];
-};
-
-export type CustomMapInfo = {
-  id: string;
-  name: string;
-  width: number;
-  height: number;
-  creator: string;
-  description: string;
-  createdAt: Date;
-  views: number;
-  starCount: number;
-};
