@@ -48,7 +48,6 @@ export default React.memo(function MapTile(props: MapTileProps) {
     warringStatesMode = false,
     isFortified = false,
   } = props;
-  console.log(`${x} ${y} render`, new Date().toISOString());
   const [cursorStyle, setCursorStyle] = useState('default');
 
   const [tileType, color, unitsCount] = tile;

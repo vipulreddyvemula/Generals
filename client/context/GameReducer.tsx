@@ -48,7 +48,7 @@ export const mapDataReducer = (
       if (!mapDiff) throw Error('mapDiff is undefined');
 
       let flattened = state.flat();
-      let newState = [...state];
+      let newState = state.map(row => [...row]);
       for (let i = 0, j = 0; i < mapDiff.length; i++) {
         let tmp = mapDiff[i]; // Ensure that the type inspection can be passed.
         if (typeof tmp === 'number') {
@@ -114,6 +114,7 @@ export const mapQueueDataReducer = (state: MapQueueData, action: any) => {
       );
     case 'change': // change map[x][y]'s className, when className equal to '50%'
       let newState = [...state];
+      newState[action.x] = [...newState[action.x]];
       newState[action.x][action.y] = {
         className: action.className,
         // text: action.text ? action.text : '',

@@ -386,7 +386,8 @@ function GamingRoom() {
     });
 
     return () => {
-      socket.io.off('reconnect');
+      socket.removeAllListeners();
+      socket.io.removeAllListeners();
       socketRef.current.disconnect();
     };
   }, [roomId, myUserName]);
