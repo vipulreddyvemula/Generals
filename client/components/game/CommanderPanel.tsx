@@ -16,7 +16,12 @@ import UpgradeIcon from '@mui/icons-material/Upgrade';
 import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import ExtensionOutlinedIcon from '@mui/icons-material/ExtensionOutlined';
+import GavelOutlinedIcon from '@mui/icons-material/GavelOutlined';
+import PsychologyAltOutlinedIcon from '@mui/icons-material/PsychologyAltOutlined';
+import CodeOutlinedIcon from '@mui/icons-material/CodeOutlined';
 import { useGame, useGameDispatch } from '@/context/GameContext';
+import { readPlayerProfile } from '@/lib/player-profile';
 import {
   AbilityType,
   ChallengeState,
@@ -30,10 +35,10 @@ const acceptedPulse = keyframes`
 `;
 
 const cardSx = {
-  border: '1px solid rgba(139, 164, 190, .16)',
-  background: 'rgba(8, 16, 28, .78)',
-  borderRadius: '10px',
-  p: 1.25,
+  border: '1px solid rgba(63, 118, 191, .52)',
+  background: 'rgba(4, 15, 24, .56)',
+  borderRadius: '5px',
+  p: 1.7,
 };
 
 type ResultBanner = {
@@ -85,20 +90,20 @@ const abilities = [
   {
     type: AbilityType.Scout,
     icon: <RadarIcon />,
-    accent: '#51d9ff',
-    effect: 'REVEAL AREA',
+    accent: '#2fe6a6',
+    effect: 'Reveals area (5x5)',
   },
   {
     type: AbilityType.Reinforce,
     icon: <UpgradeIcon />,
-    accent: '#ffbd59',
-    effect: '+40 TROOPS',
+    accent: '#2868d8',
+    effect: 'Spawns troops on target',
   },
   {
     type: AbilityType.Airstrike,
     icon: <FlightTakeoffIcon />,
-    accent: '#ff6b7a',
-    effect: 'AREA STRIKE',
+    accent: '#ff4b4b',
+    effect: 'Halves troops on target',
   },
 ];
 
@@ -130,6 +135,25 @@ export default function CommanderPanel() {
   const [activeTab, setActiveTab] = useState<'CHALLENGES' | 'ABILITIES'>(
     'CHALLENGES'
   );
+  const [connected, setConnected] = useState(Boolean(socketRef.current?.connected));
+
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket) return;
+    const onConnect = () => setConnected(true);
+    const onDisconnect = () => setConnected(false);
+    setConnected(socket.connected);
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+    };
+  }, [socketRef]);
+
+  useEffect(() => {
+    setCodeforcesHandle((current) => current || readPlayerProfile().handle);
+  }, []);
 
   const mathCooldown = Boolean(
     currentPlayer &&
@@ -146,9 +170,11 @@ export default function CommanderPanel() {
         (current) => current || currentPlayer.codeforcesHandle
       );
     const activeCf = currentPlayer.activeCodeforcesChallenge || null;
-    setCodeforcesChallenge(activeCf);
+    // A room update can arrive while the accepted banner is visible. Keep the
+    // completed card on screen until its queued successor is revealed.
+    if (!acceptedTransitionRef.current) setCodeforcesChallenge(activeCf);
     if (activeCf?.rewarded) setCfStatus('ACCEPTED');
-    else if (activeCf)
+    else if (activeCf && !acceptedTransitionRef.current)
       setCfStatus((current) =>
         current === 'VERIFYING' ? current : 'WAITING FOR SUBMISSION'
       );
@@ -176,11 +202,11 @@ export default function CommanderPanel() {
           rewardTroops: result.rewardTroops,
         });
       } else {
-        setMathChallenge(null);
+        if (result.status !== 'ERROR') setMathChallenge(null);
         setBanner({
           source: 'MATH',
           tone: 'error',
-          title: result.status === 'EXPIRED' ? 'EXPIRED' : 'NOT SOLVED',
+          title: result.status === 'EXPIRED' ? 'EXPIRED' : result.status === 'ERROR' ? 'TRY AGAIN' : 'NOT SOLVED',
           message: result.message,
         });
       }
@@ -194,8 +220,10 @@ export default function CommanderPanel() {
       }
     };
     const onCfChallenge = (challenge: CodeforcesChallengeState) => {
-      if (acceptedTransitionRef.current)
+      if (acceptedTransitionRef.current) {
         clearTimeout(acceptedTransitionRef.current);
+        acceptedTransitionRef.current = null;
+      }
       setCodeforcesChallenge(challenge);
       setCfStatus('WAITING FOR SUBMISSION');
       setCfQueueExhausted(false);
@@ -217,6 +245,7 @@ export default function CommanderPanel() {
         if (acceptedTransitionRef.current)
           clearTimeout(acceptedTransitionRef.current);
         acceptedTransitionRef.current = setTimeout(() => {
+          acceptedTransitionRef.current = null;
           if (result.nextChallenge) {
             setCodeforcesChallenge(result.nextChallenge);
             setCfStatus('WAITING FOR SUBMISSION');
@@ -441,13 +470,17 @@ export default function CommanderPanel() {
   );
   return (
     <Box
+      className='g-commander'
       sx={{
         color: '#eaf2fa',
-        fontFamily: 'Inter, system-ui, sans-serif',
-        p: 1.4,
+        fontFamily: 'Roboto, sans-serif',
+        p: 2,
         display: 'flex',
         flexDirection: 'column',
-        gap: 1.05,
+        gap: 1.3,
+        height: '100%',
+        minHeight: 0,
+        overflowY: 'auto',
       }}
     >
       <Box
@@ -461,9 +494,10 @@ export default function CommanderPanel() {
         <Box>
           <Typography
             sx={{
-              fontSize: 10,
-              letterSpacing: 2.4,
-              color: '#51d9ff',
+              fontFamily: 'Cinzel, serif',
+              fontSize: 20,
+              letterSpacing: 1.5,
+              color: '#d9b765',
               fontWeight: 800,
             }}
           >
@@ -472,25 +506,25 @@ export default function CommanderPanel() {
           <Typography
             sx={{
               fontSize: 9,
-              color: 'rgba(220,235,249,.42)',
-              letterSpacing: 1.1,
+              color: 'rgba(220,235,249,.55)',
+              letterSpacing: 1.8,
             }}
           >
-            TACTICAL UPLINK // ONLINE
+            TACTICAL UPLINK
           </Typography>
         </Box>
         <Box
           sx={{
-            width: 7,
-            height: 7,
-            borderRadius: '50%',
-            bgcolor: '#2fe6a6',
-            boxShadow: '0 0 10px #2fe6a6',
+            width: 'auto',
+            height: 'auto',
+            color: connected ? '#45d992' : '#e87378',
+            fontSize: 10,
+            '&::after': { content: connected ? '"● ONLINE"' : '"● OFFLINE"' },
           }}
         />
       </Box>
 
-      <Box sx={{ ...cardSx, background: 'rgba(7, 22, 36, .9)' }}>
+      <Box sx={{ ...cardSx, background: 'rgba(4, 16, 25, .6)', borderColor: 'rgba(104,148,171,.34)' }}>
         <Box
           sx={{
             display: 'flex',
@@ -534,12 +568,12 @@ export default function CommanderPanel() {
             (energy / (commanderConfig?.maxEnergy || 100)) * 100
           )}
           sx={{
-            height: 7,
-            borderRadius: 0,
+            height: 11,
+            borderRadius: 6,
             bgcolor: 'rgba(255,255,255,.07)',
             '& .MuiLinearProgress-bar': {
-              bgcolor: energy >= 80 ? '#ffbd59' : '#38c8f4',
-              boxShadow: '0 0 12px rgba(56,200,244,.5)',
+              bgcolor: '#2868d8',
+              boxShadow: '0 0 12px rgba(40,104,216,.5)',
               transition: 'transform .65s cubic-bezier(.2,.8,.2,1)',
             },
           }}
@@ -551,30 +585,34 @@ export default function CommanderPanel() {
         onChange={(_, newValue) => setActiveTab(newValue)}
         variant='fullWidth'
         sx={{
-          minHeight: 32,
+          minHeight: 42,
           '& .MuiTab-root': {
-            minHeight: 32,
-            fontSize: 10,
+            minHeight: 42,
+            fontSize: 11,
             fontWeight: 800,
             letterSpacing: 1.2,
-            color: 'rgba(231,242,252,.48)',
+            color: 'rgba(231,242,252,.7)',
             p: 0,
+            border: '1px solid rgba(104,148,171,.34)',
+            borderRadius: '5px',
+            marginX: .4,
           },
           '& .Mui-selected': {
-            color: '#51d9ff !important',
+            color: '#fff !important',
+            backgroundColor: '#2868d8',
           },
           '& .MuiTabs-indicator': {
-            backgroundColor: '#51d9ff',
+            display: 'none',
           },
         }}
       >
-        <Tab label='CHALLENGES' value='CHALLENGES' />
-        <Tab label='ABILITIES' value='ABILITIES' />
+        <Tab icon={<ExtensionOutlinedIcon sx={{ fontSize: 17 }} />} iconPosition='start' label='CHALLENGES' value='CHALLENGES' />
+        <Tab icon={<GavelOutlinedIcon sx={{ fontSize: 17 }} />} iconPosition='start' label='ABILITIES' value='ABILITIES' />
       </Tabs>
 
       {activeTab === 'CHALLENGES' && (
         <>
-          <Box sx={{ ...cardSx, borderLeft: '2px solid #b788ff' }}>
+          <Box sx={{ ...cardSx, borderColor: 'rgba(70,124,216,.52)' }}>
             <Box
               sx={{
                 display: 'flex',
@@ -583,67 +621,40 @@ export default function CommanderPanel() {
                 mb: 0.8,
               }}
             >
-              <Typography
-                sx={{ fontSize: 11, fontWeight: 900, letterSpacing: 1.2 }}
-              >
-                🧠 MATH
-              </Typography>
-              <Chip
-                label={mathChallenge?.difficulty || 'TACTICAL'}
-                size='small'
-                sx={{
-                  height: 18,
-                  fontSize: 8,
-                  fontWeight: 800,
-                  color: '#d9c2ff',
-                  bgcolor: 'rgba(183,136,255,.12)',
-                  borderRadius: 1,
-                }}
-              />
+              <Typography sx={{ display: 'flex', alignItems: 'center', gap: .7, fontSize: 12, fontWeight: 900, letterSpacing: .8 }}><PsychologyAltOutlinedIcon sx={{ fontSize: 19, color: '#8baeff' }} />MATH CHALLENGE</Typography>
             </Box>
             {mathChallenge ? (
               <>
                 <Typography
                   sx={{
-                    fontSize: 13,
+                    fontSize: 15,
                     fontWeight: 700,
                     lineHeight: 1.35,
                     minHeight: 34,
+                    mt: 1.5,
                   }}
                 >
                   {mathChallenge.question}
                 </Typography>
-                <Box sx={{ display: 'flex', gap: 1.4, my: 0.8 }}>
-                  <Typography
-                    sx={{ fontSize: 10, color: '#65dcff', fontWeight: 800 }}
-                  >
-                    +{mathChallenge.rewardEnergy} ENERGY
-                  </Typography>
-                  <Typography
-                    sx={{ fontSize: 10, color: '#ffcb72', fontWeight: 800 }}
-                  >
-                    +{mathChallenge.rewardTroops} TROOPS
-                  </Typography>
-                </Box>
                 <Box
                   component='form'
                   onSubmit={submitMath}
-                  sx={{ display: 'flex', gap: 0.7 }}
+                  sx={{ display: 'grid', gap: 1.2, mt: 1.5 }}
                 >
                   <TextField
                     value={mathAnswer}
                     onChange={(event) => setMathAnswer(event.target.value)}
-                    placeholder='ENTER ANSWER'
+                    placeholder='Enter your answer...'
                     size='small'
                     fullWidth
                     inputProps={{ 'aria-label': 'Math challenge answer' }}
                     sx={{
                       '& .MuiOutlinedInput-root': {
-                        height: 34,
+                        height: 43,
                         color: '#fff',
                         fontSize: 12,
                         bgcolor: 'rgba(0,0,0,.18)',
-                        '& fieldset': { borderColor: 'rgba(183,136,255,.25)' },
+                        '& fieldset': { borderColor: 'rgba(104,148,171,.45)' },
                       },
                     }}
                   />
@@ -652,63 +663,27 @@ export default function CommanderPanel() {
                     disabled={!mathAnswer.trim()}
                     sx={{
                       minWidth: 72,
-                      color: '#f4edff',
-                      border: '1px solid rgba(183,136,255,.45)',
-                      fontSize: 10,
+                      minHeight: 40,
+                      color: '#fff',
+                      bgcolor: '#2868d8',
+                      '&:hover': { bgcolor: '#347cf3' },
+                      fontSize: 12,
                       fontWeight: 900,
                     }}
                   >
-                    SUBMIT
+                    Verify Answer
                   </Button>
                 </Box>
               </>
             ) : (
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 1,
-                }}
-              >
-                <Box>
-                  <Typography sx={{ fontSize: 11, fontWeight: 700 }}>
-                    Quick tactical problem
-                  </Typography>
-                  <Typography
-                    sx={{
-                      fontSize: 9,
-                      color: 'rgba(231,242,252,.48)',
-                      mt: 0.25,
-                    }}
-                  >
-                    Low risk ·{' '}
-                    {commanderConfig
-                      ? `+${commanderConfig.mathRewards.EASY.energy}–${commanderConfig.mathRewards.EXPERT.energy} energy`
-                      : 'reward data syncing'}
-                  </Typography>
-                </Box>
-                <Button
-                  onClick={requestMath}
-                  disabled={mathCooldown}
-                  sx={{
-                    color: '#d9c2ff',
-                    border: '1px solid rgba(183,136,255,.36)',
-                    fontSize: 9,
-                    fontWeight: 900,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {mathCooldown ? 'RECHARGING' : 'SOLVE'}
-                </Button>
-              </Box>
+              <Box sx={{ display: 'grid', gap: 1.2, mt: 1.3 }}><Typography sx={{ fontSize: 12, color: '#a4b4c2' }}>Request a tactical question to solve in-game.</Typography><Button onClick={requestMath} disabled={mathCooldown} sx={{ color: '#fff', bgcolor: '#2868d8', '&:hover': { bgcolor: '#347cf3' }, fontSize: 12, fontWeight: 800 }}>{mathCooldown ? 'Recharging' : 'Get Math Challenge'}</Button></Box>
             )}
           </Box>
 
           <Box
             sx={{
               ...cardSx,
-              borderLeft: '2px solid #2fe6a6',
+              borderColor: 'rgba(70,124,216,.58)',
               animation:
                 cfStatus === 'ACCEPTED'
                   ? `${acceptedPulse} 1.2s ease-out`
@@ -723,73 +698,48 @@ export default function CommanderPanel() {
                 mb: 0.8,
               }}
             >
-              <Typography
-                sx={{ fontSize: 11, fontWeight: 900, letterSpacing: 1.1 }}
-              >
-                💻 CODEFORCES
-              </Typography>
+              <Typography sx={{ display: 'flex', alignItems: 'center', gap: .7, fontSize: 12, fontWeight: 900, letterSpacing: .8 }}><CodeOutlinedIcon sx={{ fontSize: 19, color: '#80aaff' }} />CODEFORCES CHALLENGE</Typography>
               <Chip
                 label={cfStatus}
                 size='small'
                 sx={{
                   maxWidth: 150,
                   height: 18,
-                  fontSize: 7.5,
-                  fontWeight: 900,
-                  color: cfStatus === 'ACCEPTED' ? '#2fe6a6' : '#83e8ff',
-                  bgcolor: 'rgba(47,230,166,.09)',
+                    fontSize: 8,
+                    fontWeight: 900,
+                    color: cfStatus === 'ACCEPTED' ? '#45d992' : '#89b4ff',
+                    bgcolor: 'rgba(40,104,216,.14)',
                   borderRadius: 1,
                 }}
               />
             </Box>
             {codeforcesChallenge ? (
               <>
-                <Box sx={{ display: 'flex', gap: 0.8, alignItems: 'baseline' }}>
+                <Box sx={{ display: 'flex', gap: 0.8, alignItems: 'baseline', mt: 1.5 }}>
                   <Typography
                     sx={{ fontSize: 17, fontWeight: 900, color: '#fff' }}
                   >
                     {codeforcesChallenge.contestId}
                     {codeforcesChallenge.problemIndex}
                   </Typography>
-                  <Typography
-                    sx={{ fontSize: 9, color: 'rgba(231,242,252,.5)' }}
-                  >
-                    QUEUE #{codeforcesChallenge.queuePosition + 1} ·{' '}
-                    {codeforcesChallenge.difficulty.replace('_', ' ')} · CF{' '}
-                    {codeforcesChallenge.rating}
-                    {typeof codeforcesChallenge.clistRating === 'number' &&
-                    codeforcesChallenge.clistRating >= 0
-                      ? ` · CLIST ${codeforcesChallenge.clistRating}`
-                      : ''}
-                  </Typography>
                 </Box>
                 <Typography
                   sx={{
-                    fontSize: 12,
+                    fontSize: 15,
                     fontWeight: 700,
                     lineHeight: 1.3,
-                    mt: 0.2,
+                    mt: 0.3,
                   }}
                 >
                   {codeforcesChallenge.problemName}
                 </Typography>
-                <Box sx={{ display: 'flex', gap: 1.4, my: 0.8 }}>
-                  <Typography
-                    sx={{ fontSize: 12, color: '#2fe6a6', fontWeight: 900 }}
-                  >
-                    +{codeforcesChallenge.rewardEnergy} ENERGY
-                  </Typography>
-                  <Typography
-                    sx={{ fontSize: 10, color: '#ffcb72', fontWeight: 800 }}
-                  >
-                    +{codeforcesChallenge.rewardTroops} TROOPS
-                  </Typography>
-                </Box>
+                <Typography sx={{ fontSize: 12, color: '#a4b4c2', mt: 1.5, lineHeight: 1.5 }}>Solve on Codeforces using your handle.<br />Get Accepted, then verify.</Typography>
                 <Box
                   sx={{
                     display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: 0.7,
+                    gridTemplateColumns: '1fr',
+                    gap: 1,
+                    mt: 1.5,
                   }}
                 >
                   <Button
@@ -798,14 +748,15 @@ export default function CommanderPanel() {
                       <OpenInNewIcon sx={{ fontSize: '14px !important' }} />
                     }
                     sx={{
-                      color: '#83e8ff',
-                      border: '1px solid rgba(81,217,255,.32)',
-                      fontSize: 8.5,
+                      color: '#89b4ff',
+                      border: '1px solid rgba(70,124,216,.52)',
+                      minHeight: 38,
+                      fontSize: 11,
                       fontWeight: 900,
                       width: '100%',
                     }}
                   >
-                    OPEN ON CODEFORCES ↗
+                    Open in Codeforces
                   </Button>
                   <Button
                     onClick={verifyCodeforces}
@@ -822,49 +773,26 @@ export default function CommanderPanel() {
                       )
                     }
                     sx={{
-                      color: '#5ef0b5',
-                      border: '1px solid rgba(47,230,166,.34)',
-                      fontSize: 8.5,
+                      color: '#fff',
+                      bgcolor: '#2868d8',
+                      '&:hover': { bgcolor: '#347cf3' },
+                      minHeight: 40,
+                      fontSize: 11,
                       fontWeight: 900,
                       width: '100%',
                     }}
                   >
                     {cfStatus === 'VERIFYING'
-                      ? 'VERIFYING'
+                      ? 'Checking…'
                       : cfStatus === 'ACCEPTED'
-                        ? 'ACCEPTED'
-                        : 'VERIFY SOLUTION'}
+                        ? 'Accepted'
+                        : 'Verify Solution'}
                   </Button>
                 </Box>
               </>
             ) : (
               <>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'baseline',
-                    mb: 0.7,
-                  }}
-                >
-                  <Typography
-                    sx={{ fontSize: 10, color: 'rgba(231,242,252,.55)' }}
-                  >
-                    {(
-                      commanderConfig?.codeforcesReward.difficulty ||
-                      'SUPER_EASY'
-                    ).replace('_', ' ')}{' '}
-                    · CLIST BAND{' '}
-                    {commanderConfig?.codeforcesReward.clistBand ?? 0}
-                  </Typography>
-                  <Typography
-                    sx={{ fontSize: 13, color: '#2fe6a6', fontWeight: 900 }}
-                  >
-                    {commanderConfig
-                      ? `+${commanderConfig.codeforcesReward.energy} ENERGY`
-                      : 'HIGH REWARD'}
-                  </Typography>
-                </Box>
+                <Typography sx={{ fontSize: 12, color: '#a4b4c2', mb: 1 }}>Sync your Codeforces handle to receive the shared challenge.</Typography>
                 {cfQueueStatus && !cfQueueStatus.initialized && (
                   <Typography
                     sx={{
@@ -874,8 +802,8 @@ export default function CommanderPanel() {
                       letterSpacing: 0.4,
                     }}
                   >
-                    SHARED GRID QUEUE · {cfQueueStatus.readyPlayers}/
-                    {cfQueueStatus.totalPlayers} HISTORIES READY
+                    Preparing shared queue · {cfQueueStatus.readyPlayers}/
+                    {cfQueueStatus.totalPlayers} players ready
                   </Typography>
                 )}
                 {cfQueueExhausted ? (
@@ -897,7 +825,7 @@ export default function CommanderPanel() {
                       onChange={(event) =>
                         setCodeforcesHandle(event.target.value)
                       }
-                      placeholder='CODEFORCES HANDLE'
+                      placeholder='Codeforces handle'
                       size='small'
                       fullWidth
                       disabled={
@@ -928,9 +856,14 @@ export default function CommanderPanel() {
                         codeforcesHandle.trim().length < 3
                       }
                       sx={{
-                        minWidth: 82,
-                        color: '#5ef0b5',
-                        border: '1px solid rgba(47,230,166,.34)',
+                        minWidth: 98,
+                        color: '#fff',
+                        bgcolor: '#2868d8',
+                        '&:hover': { bgcolor: '#347cf3' },
+                        '&.Mui-disabled': {
+                          bgcolor: 'rgba(40,104,216,.4)',
+                          color: 'rgba(255,255,255,.5)',
+                        },
                         fontSize: 9,
                         fontWeight: 900,
                       }}
@@ -938,9 +871,9 @@ export default function CommanderPanel() {
                       {cfStatus === 'ASSIGNING' ? (
                         <CircularProgress size={14} color='inherit' />
                       ) : cfPlayerReady ? (
-                        'SYNCED'
+                        'Synced'
                       ) : (
-                        'SYNC HANDLE'
+                        'Sync Handle'
                       )}
                     </Button>
                   </Box>
@@ -999,8 +932,8 @@ export default function CommanderPanel() {
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: 0.7,
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: 1,
           }}
         >
           {abilities.map((ability) => {
@@ -1015,29 +948,31 @@ export default function CommanderPanel() {
                 aria-pressed={selected}
                 sx={{
                   minWidth: 0,
-                  p: 0.75,
+                  p: 1.8,
+                  minHeight: 112,
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 0.25,
+                  gap: 0.5,
                   color: affordable ? ability.accent : 'rgba(231,242,252,.24)',
                   border: `1px solid ${selected ? ability.accent : affordable ? `${ability.accent}55` : 'rgba(255,255,255,.06)'}`,
+                  borderRadius: '6px',
                   bgcolor: selected
                     ? `${ability.accent}18`
                     : 'rgba(8,16,28,.72)',
-                  '& svg': { fontSize: 18 },
+                  '& svg': { fontSize: 24 },
                 }}
               >
                 {ability.icon}
                 <Typography
-                  sx={{ fontSize: 8, fontWeight: 900, letterSpacing: 0.5 }}
+                  sx={{ fontSize: 11, fontWeight: 900, letterSpacing: 0.5 }}
                 >
                   {ability.type.toUpperCase()}
                 </Typography>
-                <Typography sx={{ fontSize: 9, fontWeight: 900 }}>
+                <Typography sx={{ fontSize: 11, fontWeight: 900 }}>
                   {cost ?? '—'} ENERGY
                 </Typography>
                 <Typography
-                  sx={{ fontSize: 6.8, color: 'inherit', opacity: 0.65 }}
+                  sx={{ fontSize: 9, color: 'inherit', opacity: 0.75 }}
                 >
                   {ability.effect}
                 </Typography>

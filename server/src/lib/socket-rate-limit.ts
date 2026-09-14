@@ -6,6 +6,7 @@ export interface RatePolicy {
 export const SOCKET_EVENT_POLICIES: Readonly<Record<string, RatePolicy>> = Object.freeze({
   attack: { burst: 16, refillMs: 1000 },
   surrender: { burst: 1, refillMs: 10_000 },
+  leave_room: { burst: 1, refillMs: 5000 },
   set_team: { burst: 6, refillMs: 10_000 },
   change_room_setting: { burst: 24, refillMs: 1000 },
   player_message: { burst: 6, refillMs: 5000 },

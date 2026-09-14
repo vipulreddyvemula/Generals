@@ -5,3 +5,5 @@ server/custom_map/*
 .env
 .env.local
 temp.md
+lovable-reference/
+docs/ui-reference/

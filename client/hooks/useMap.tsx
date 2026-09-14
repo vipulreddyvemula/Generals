@@ -12,12 +12,14 @@ interface useMapProps {
   mapWidth: number;
   mapHeight: number;
   listenTouch?: boolean;
+  fitContainerSelector?: string;
 }
 
 export default function useMap({
   mapWidth,
   mapHeight,
   listenTouch = true,
+  fitContainerSelector,
 }: useMapProps) {
   const [zoom, setZoom] = useState<number>(1.0);
   const [tileSize, setTileSize] = useState(40);
@@ -30,12 +32,28 @@ export default function useMap({
   useEffect(() => {
     setZoom(isSmallScreen ? 0.7 : 1.0);
 
-    if (mapHeight > 40 || mapHeight > 40) {
+    if (mapWidth > 40 || mapHeight > 40) {
       setZoom(0.5);
-    } else if (mapHeight > 25 || mapHeight > 25) {
+    } else if (mapWidth > 25 || mapHeight > 25) {
       setZoom(0.75);
     }
-  }, [isSmallScreen]);
+  }, [isSmallScreen, mapWidth, mapHeight]);
+
+  useEffect(() => {
+    if (!fitContainerSelector || !mapWidth || !mapHeight) return;
+    const container = mapRef.current?.closest(fitContainerSelector) as HTMLElement | null;
+    if (!container) return;
+    const fit = () => {
+      // GameMap's x/y axes are transposed in the renderer; fit the real tile
+      // dimensions to the available center stage without changing input math.
+      const scale = Math.min(1, (container.clientWidth - 24) / (40 * mapHeight), (container.clientHeight - 24) / (40 * mapWidth));
+      setZoom(Math.max(.25, scale));
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [fitContainerSelector, mapWidth, mapHeight]);
 
   const mapPixelWidth = useMemo(
     () => tileSize * mapWidth * zoom,

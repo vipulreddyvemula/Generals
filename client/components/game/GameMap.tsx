@@ -71,6 +71,7 @@ function GameMap() {
     mapWidth: initGameInfo ? initGameInfo.mapWidth : 0,
     mapHeight: initGameInfo ? initGameInfo.mapHeight : 0,
     listenTouch: false, // implement touch later
+    fitContainerSelector: '.g-game-battlefield',
   });
 
   const centerGeneral = useCallback(() => {
@@ -392,7 +393,10 @@ function GameMap() {
           return tiles.map((tile, y) => {
             return (
               <div key={`${x}/${y}`}
-                onClick={() => handleClick(tile.tile, x, y, myPlayerIndex)}>
+                onClick={() => {
+                  mapRef.current?.focus();
+                  handleClick(tile.tile, x, y, myPlayerIndex);
+                }}>
                 <MapTile
                   isNextPossibleMove={testIfNextPossibleMove(tile.tile[0], x, y)}
                   zoom={zoom}

@@ -1,4 +1,5 @@
 import '../styles/globals.css';
+import '../styles/generals-ui.css';
 import type { AppProps } from 'next/app';
 import { appWithTranslation } from 'next-i18next';
 import { GoogleAnalytics } from 'nextjs-google-analytics';

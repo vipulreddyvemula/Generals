@@ -15,7 +15,7 @@ import {
 } from '@mui/material';
 
 export default function OverDialog() {
-  const { myPlayerId, room, dialogContent, openOverDialog } = useGame();
+  const { myPlayerId, room, dialogContent, openOverDialog, socketRef } = useGame();
   const { setRoomUiStatus, setOpenOverDialog } = useGameDispatch();
   const [replayLink, setReplayLink] = React.useState('');
   const { t } = useTranslation();
@@ -52,10 +52,24 @@ export default function OverDialog() {
     }
   }, [dialogContent]);
 
-  const handleExit = () => {
-    router.push('/');
-    setOpenOverDialog(false);
+  const leaveAndNavigate = (path: string) => {
+    const socket = socketRef.current;
+    const finish = (confirmed: boolean) => {
+      if (confirmed) localStorage.removeItem(`generals.player-session.${room.id}`);
+      socket?.disconnect();
+      setOpenOverDialog(false);
+      void router.push(path);
+    };
+    if (!socket?.connected || room.gameStarted) {
+      finish(false);
+      return;
+    }
+    socket.timeout(1500).emit('leave_room', (error: Error | null, result?: { ok: boolean }) => {
+      finish(!error && result?.ok === true);
+    });
   };
+
+  const handleExit = () => leaveAndNavigate('/');
 
   const handleBackRoom = () => {
     if (!room.gameStarted) setRoomUiStatus(RoomUiStatus.gameSetting);
@@ -63,13 +77,13 @@ export default function OverDialog() {
   };
 
   const handleWatchReplay = () => {
-    router.push(`/replays/${replayLink}`);
-    setOpenOverDialog(false);
+    leaveAndNavigate(`/replays/${replayLink}`);
   };
 
   return (
     <Dialog
       open={openOverDialog}
+      PaperProps={{ className: 'g-match-dialog g-result-dialog' }}
       onClose={(event: any, reason) => {
         if (reason === 'backdropClick') return;
         setOpenOverDialog(false);

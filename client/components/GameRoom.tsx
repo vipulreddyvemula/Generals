@@ -3,7 +3,6 @@ import { useRouter } from 'next/router';
 import { io } from 'socket.io-client';
 import { useTranslation } from 'next-i18next';
 import ChatBox from '@/components/ChatBox';
-import Navbar from '@/components/Navbar';
 
 import { Snackbar, Alert, AlertTitle } from '@mui/material';
 
@@ -41,6 +40,8 @@ function GamingRoom() {
     myUserName,
     snackState,
   } = useGame();
+
+  const socketDisconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const {
     roomDispatch,
     mapDataDispatch,
@@ -62,7 +63,7 @@ function GamingRoom() {
   useEffect(() => {
     let tmp: string | null = localStorage.getItem('username');
     if (!tmp) {
-      router.push('/');
+      router.push('/player-details');
     } else {
       setMyUserName(tmp);
     }
@@ -71,7 +72,9 @@ function GamingRoom() {
   useEffect(() => {
     // Game Logic Init
     if (!roomId) return;
-    if (!myUserName) return;
+    const usernameFromStorage = localStorage.getItem('username') || myUserName;
+    if (!usernameFromStorage) return;
+
     class AttackQueue {
       public items: Route[];
       public lastItem: Route | undefined;
@@ -169,19 +172,31 @@ function GamingRoom() {
       localStorage.removeItem(sessionStorageKey);
     }
 
-    socketRef.current = io(process.env.NEXT_PUBLIC_SERVER_API, {
-      query: {
-        roomId: roomId,
-        username: myUserName,
-      },
-      auth: savedSession || {},
-    });
-    let socket = socketRef.current;
-    socket.emit('get_room_info');
+    if (socketDisconnectTimerRef.current) {
+      clearTimeout(socketDisconnectTimerRef.current);
+      socketDisconnectTimerRef.current = null;
+    }
 
+    if (!socketRef.current) {
+      socketRef.current = io(process.env.NEXT_PUBLIC_SERVER_API, {
+        query: {
+          roomId: roomId,
+          username: usernameFromStorage,
+        },
+        auth: savedSession || {},
+      });
+    } else if (socketRef.current.disconnected) {
+      socketRef.current.auth = savedSession || {};
+      socketRef.current.connect();
+    }
+    let socket = socketRef.current;
+    let duplicateRetryCount = 0;
+    let duplicateRetryTimer: ReturnType<typeof setTimeout> | null = null;
     // set up socket event listeners
     socket.on('connect', () => {
       console.log(`socket client connect to server: ${socket.id}`);
+      snackStateDispatch({ type: 'close' });
+      socket.emit('get_room_info');
     });
     // get player id when first connect
     socket.on('set_player_id', (playerId: string) => {
@@ -192,6 +207,9 @@ function GamingRoom() {
     socket.on(
       'player_session',
       (session: { playerId: string; reconnectToken: string }) => {
+        duplicateRetryCount = 0;
+        if (duplicateRetryTimer) clearTimeout(duplicateRetryTimer);
+        duplicateRetryTimer = null;
         setMyPlayerId(session.playerId);
         myPlayerIdRef.current = session.playerId;
         socket.auth = session;
@@ -201,7 +219,8 @@ function GamingRoom() {
     socket.on('game_started', (initGameInfo: initGameInfo) => {
       console.log('Game started:', initGameInfo);
       const audio = new Audio('/audio/fresh_snap.mp3');
-      audio.play(); // todo: fix safari NotAllowedError... the user denied permission.
+      // Autoplay may be denied until the player interacts with the page.
+      void audio.play().catch(() => undefined);
       setInitGameInfo(initGameInfo);
       setIsSurrendered(false);
       setDialogContent([[null], '', null]);
@@ -341,35 +360,49 @@ function GamingRoom() {
     );
 
     socket.on('reject_join', (message: string) => {
+      if (
+        message.includes('already active on another connection') &&
+        savedSession &&
+        duplicateRetryCount < 3
+      ) {
+        duplicateRetryCount += 1;
+        snackStateDispatch({
+          type: 'update',
+          title: 'Restoring session',
+          status: 'info',
+          message: 'Waiting for the previous connection to close…',
+          duration: null,
+        });
+        duplicateRetryTimer = setTimeout(() => {
+          duplicateRetryTimer = null;
+          socket.connect();
+        }, 300 * duplicateRetryCount);
+        return;
+      }
       if (message.startsWith('Session authentication failed')) {
         localStorage.removeItem(sessionStorageKey);
         socket.auth = {};
       }
-      snackStateDispatch({
-        type: 'update',
-        title: t('reject-join'),
-        status: 'error',
-        message: 'Please choose another room.',
-        duration: null,
+      void router.replace({
+        pathname: '/play',
+        query: { joinError: message || 'Could not join this room.' },
       });
-      // router.push(`/`);
     });
 
     socket.on('connect_error', (error: Error) => {
       console.log('\nConnection Failed: ' + error);
-      socket.disconnect();
-
       snackStateDispatch({
         type: 'update',
         title: 'Connect Error',
         status: 'error',
-        message: 'Please refresh the App.',
+        message: 'Connection unavailable. Retrying…',
         duration: null,
       });
     });
 
     socket.on('disconnect', () => {
       console.log('Disconnected from server.');
+      if (duplicateRetryTimer) return;
 
       snackStateDispatch({
         type: 'update',
@@ -380,17 +413,14 @@ function GamingRoom() {
       });
     });
 
-    socket.io.on('reconnect', () => {
-      console.log('Reconnected to server.');
-      socket.emit('get_room_info');
-    });
-
     return () => {
+      if (duplicateRetryTimer) clearTimeout(duplicateRetryTimer);
       socket.removeAllListeners();
-      socket.io.removeAllListeners();
-      socketRef.current.disconnect();
+      socketDisconnectTimerRef.current = setTimeout(() => {
+        socket.disconnect();
+      }, 500);
     };
-  }, [roomId, myUserName]);
+  }, [roomId]);
 
   useEffect(() => {
     if (room.gameStarted && roomUiStatus === RoomUiStatus.gameSetting) {
@@ -399,12 +429,12 @@ function GamingRoom() {
   }, [room, roomUiStatus, setRoomUiStatus]);
 
   return (
-    <div className='app-container'>
+    <div className='generals-room-root'>
       <Snackbar
         open={snackState.open}
         autoHideDuration={snackState.duration}
         onClose={() => {
-          snackStateDispatch({ type: 'toggle' });
+        snackStateDispatch({ type: 'close' });
         }}
       >
         <Alert severity={snackState.status} sx={{ width: '100%' }}>
@@ -413,12 +443,9 @@ function GamingRoom() {
         </Alert>
       </Snackbar>
       {roomUiStatus === RoomUiStatus.gameSetting && (
-        <div>
-          <Navbar />
-          <div className='center-layout'>
-            <GameSetting />
-          </div>
-        </div>
+        room.id && myPlayerId ? (
+          <GameSetting chat={<ChatBox socket={socketRef.current} messages={messages} embedded />} />
+        ) : <GameLoading />
       )}
       {roomUiStatus === RoomUiStatus.loading && (
         <div className='center-layout'>
@@ -427,14 +454,9 @@ function GamingRoom() {
       )}
       {(roomUiStatus === RoomUiStatus.gameRealStarted ||
         roomUiStatus === RoomUiStatus.gameOverConfirm) && <Game />}
-      <ChatBox
-        socket={socketRef.current}
-        messages={messages}
-        compact={
-          roomUiStatus === RoomUiStatus.gameRealStarted ||
-          roomUiStatus === RoomUiStatus.gameOverConfirm
-        }
-      />
+      {(roomUiStatus === RoomUiStatus.gameRealStarted ||
+        roomUiStatus === RoomUiStatus.gameOverConfirm) &&
+        <ChatBox socket={socketRef.current} messages={messages} compact />}
     </div>
   );
 }

@@ -12,8 +12,11 @@ export { Point, Player, GameMap, MapDiff };
 // --- Commander Mode Types ---
 export enum AbilityType {
   Scout = 'Scout',
+  Blitz = 'Blitz',
   Reinforce = 'Reinforce',
+  Fortify = 'Fortify',
   Airstrike = 'Airstrike',
+  SupplySurge = 'Supply Surge',
 }
 
 export interface AbilityState {
@@ -70,8 +73,11 @@ export interface CodeforcesChallengeState {
 // ============================================================
 export const ABILITY_COSTS: Record<AbilityType, number> = {
   [AbilityType.Scout]: COMMANDER_CONFIG.abilities.Scout.energy,
+  [AbilityType.Blitz]: COMMANDER_CONFIG.abilities.Blitz.energy,
   [AbilityType.Reinforce]: COMMANDER_CONFIG.abilities.Reinforce.energy,
+  [AbilityType.Fortify]: COMMANDER_CONFIG.abilities.Fortify.energy,
   [AbilityType.Airstrike]: COMMANDER_CONFIG.abilities.Airstrike.energy,
+  [AbilityType.SupplySurge]: COMMANDER_CONFIG.abilities['Supply Surge'].energy,
 };
 
 // Cooldown in turns after a challenge (correct or incorrect)

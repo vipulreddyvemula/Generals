@@ -70,6 +70,7 @@ export default function SurrenderDialog({
   return (
     <Dialog
       open={isOpen}
+      PaperProps={{ className: 'g-match-dialog' }}
       onClose={handleClose}
       maxWidth='md'
       aria-labelledby='Surrender Dialog'

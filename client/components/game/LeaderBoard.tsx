@@ -21,6 +21,8 @@ interface LeaderBoardProps {
   checkedPlayers?: UserData[];
   setCheckedPlayers?: (value: UserData[]) => void;
   warringStatesMode?: boolean;
+  matchHud?: boolean;
+  myPlayerId?: string;
 }
 
 type LeaderBoardData = {
@@ -37,9 +39,22 @@ export default function LeaderBoard(props: LeaderBoardProps) {
     checkedPlayers,
     setCheckedPlayers,
     warringStatesMode = false,
+    matchHud = false,
+    myPlayerId,
   } = props;
   const [gameDockExpand, setGameDockExpand] = useState(true);
   const { t } = useTranslation();
+
+  if (matchHud) {
+    const ranked = players
+      .filter((player) => player.team !== MaxTeamNum + 1)
+      .map((player) => {
+        const score = leaderBoardTable?.find((row) => row[0] === player.color);
+        return { color: player.color, army: score?.[2] || 0, land: score?.[3] || 0, player };
+      })
+      .sort((a, b) => b.army - a.army || b.land - a.land);
+    return <section className='g-panel g-hud-leaderboard'><h2>PLAYERS</h2><div className='g-leader-head'><span>#</span><span>Player</span><span>Army</span><span>Land</span></div><ol>{ranked.map((entry, index) => <li key={entry.color} className={entry.player?.id === myPlayerId ? 'self' : ''}><span>{index + 1}</span><span className='g-leader-name'><i style={{ background: ColorArr[entry.color] }} /><span>{entry.player?.username || `Player ${entry.color}`}{entry.player?.id === myPlayerId && <small> (You)</small>}</span></span><b>{entry.army}</b><span>{entry.land}</span></li>)}</ol></section>;
+  }
 
   if (!leaderBoardTable) return null;
 

@@ -256,45 +256,57 @@ function finishGame(room: Room, io: Server, gameRecord: GameRecord): boolean {
   return true;
 }
 
+function removeRoomParticipant(room: Room, player: Player, io: Server): void {
+  if (roomPool[room.id] !== room || !room.players.includes(player)) return;
+  cancelReconnectGrace(player);
+  player.sessionTokenHash = '';
+  player.socket_id = '';
+  player.forceStart = false;
+  room.players = room.players.filter((candidate) => candidate !== player);
+  room.forceStartNum = room.players.filter((candidate) => candidate.forceStart).length;
+  if (room.players.length === 0 && !room.keepAlive) {
+    delete roomPool[room.id];
+  } else {
+    if (room.players.length > 0 && !room.players.some((candidate) => candidate.isRoomHost)) {
+      room.players[0].setRoomHost(true);
+    }
+    io.in(room.id).emit('update_room', room);
+    if (!room.gameStarted) void checkForcedStart(room, io);
+  }
+}
+
 function handleDisconnectInRoom(room: Room, player: Player, socketId: string, io: Server): void {
   try {
     if (player.socket_id !== socketId) return;
 
-    if (room.gameStarted && !player.spectating()) {
-      player.socket_id = '';
-      scheduleReconnectGrace(
-        player,
-        () => {
-          const liveRoom = roomPool[room.id];
-          const livePlayer = liveRoom?.players.find((candidate) => candidate.id === player.id);
-          if (!liveRoom || !livePlayer || !livePlayer.disconnected) return;
-
-          livePlayer.sessionTokenHash = '';
-          if (liveRoom.gameStarted) {
-            neutralizePlayer(liveRoom, livePlayer);
-            io.in(liveRoom.id).emit('room_message', livePlayer.minify(), 'failed to reconnect and was eliminated.');
-            if (!liveRoom.codeforcesQueue) tryInitializeCodeforcesQueue(liveRoom, io);
-            const outcome = getGameOutcome(liveRoom);
-            if (outcome.terminal && liveRoom.gameRecord) {
-              finishGame(liveRoom, io, liveRoom.gameRecord);
-            } else {
-              io.in(liveRoom.id).emit('update_room', liveRoom);
-            }
-          }
-        },
-        ReconnectGraceMs
-      );
-      io.in(room.id).emit('room_message', player.minify(), `disconnected; ${ReconnectGraceMs / 1000}s to reconnect.`);
-    } else {
-      cancelReconnectGrace(player);
-      room.players = room.players.filter((p) => p.id != player.id);
+    // Keep the authenticated seat during a transient disconnect, including
+    // before game start. Explicit leave_room removes it immediately instead.
+    player.socket_id = '';
+    if (player.forceStart) {
+      player.forceStart = false;
       room.forceStartNum = room.players.filter((candidate) => candidate.forceStart).length;
-      if (room.players.length < 1 && !room.keepAlive) {
-        delete roomPool[room.id];
-      } else if (room.players[0] && !room.players.some((candidate) => candidate.isRoomHost)) {
-        room.players[0].setRoomHost(true);
-      }
     }
+    scheduleReconnectGrace(player, () => {
+      const liveRoom = roomPool[room.id];
+      const livePlayer = liveRoom?.players.find((candidate) => candidate.id === player.id);
+      if (liveRoom !== room || livePlayer !== player || !livePlayer.disconnected) return;
+
+      livePlayer.sessionTokenHash = '';
+      if (liveRoom.gameStarted && !livePlayer.spectating()) {
+        neutralizePlayer(liveRoom, livePlayer);
+        io.in(liveRoom.id).emit('room_message', livePlayer.minify(), 'failed to reconnect and was eliminated.');
+        if (!liveRoom.codeforcesQueue) tryInitializeCodeforcesQueue(liveRoom, io);
+        const outcome = getGameOutcome(liveRoom);
+        if (outcome.terminal && liveRoom.gameRecord) {
+          finishGame(liveRoom, io, liveRoom.gameRecord);
+        } else {
+          io.in(liveRoom.id).emit('update_room', liveRoom);
+        }
+      } else {
+        removeRoomParticipant(liveRoom, livePlayer, io);
+      }
+    }, ReconnectGraceMs);
+    io.in(room.id).emit('room_message', player.minify(), `disconnected; ${ReconnectGraceMs / 1000}s to reconnect.`);
     if (room.gameStarted && !room.codeforcesQueue) tryInitializeCodeforcesQueue(room, io);
     io.in(room.id).emit('update_room', room);
   } catch (e: any) {
@@ -653,6 +665,17 @@ io.on('connection', async (socket) => {
 
   socket.on('get_room_info', async () => {
     socket.emit('update_room', room);
+  });
+
+  socket.on('leave_room', (ack?: (result: { ok: boolean; message?: string }) => void) => {
+    const actingPlayer = resolveSocketPlayer(room, socket.id);
+    if (!actingPlayer || room.gameStarted) {
+      ack?.({ ok: false, message: 'Unable to leave this waiting room.' });
+      return;
+    }
+    removeRoomParticipant(room, actingPlayer, io);
+    ack?.({ ok: true });
+    socket.disconnect(true);
   });
 
   socket.on('set_team', (team: unknown) => {
@@ -1151,8 +1174,8 @@ io.on('connection', async (socket) => {
             result.reason === 'old_submission'
               ? 'That solution predates this assignment. Submit a new accepted solution.'
               : result.reason === 'rejected'
-              ? 'Not accepted yet. Keep solving this problem on Codeforces.'
-              : 'No submission found yet. Submit on Codeforces, then verify again.';
+                ? 'Not accepted yet. Keep solving this problem on Codeforces.'
+                : 'No submission found yet. Submit on Codeforces, then verify again.';
           liveSocket?.emit('codeforces_verification_result', {
             status: 'NOT_ACCEPTED',
             reason: result.reason,

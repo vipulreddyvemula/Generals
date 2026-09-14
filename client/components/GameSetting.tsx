@@ -1,518 +1,400 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
+import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
+import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import MilitaryTechOutlinedIcon from '@mui/icons-material/MilitaryTechOutlined';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import { MenuItem, Select } from '@mui/material';
+import { useGame } from '@/context/GameContext';
 import {
-  Box,
-  Card,
-  CardHeader,
-  CardContent,
-  Button,
-  IconButton,
-  Tab,
-  Tabs,
-  Typography,
-  TextField,
-  FormGroup,
-  FormControlLabel,
-  Switch,
-  ToggleButtonGroup,
-  ToggleButton,
-} from '@mui/material';
-import { styled } from '@mui/material/styles';
-import ShareIcon from '@mui/icons-material/Share';
-import TerrainIcon from '@mui/icons-material/Terrain';
-import LocationCityIcon from '@mui/icons-material/LocationCity';
-import WaterIcon from '@mui/icons-material/Water';
-import GroupIcon from '@mui/icons-material/Group';
-import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
-import { useTranslation } from 'next-i18next';
+  ColorArr,
+  forceStartOK,
+  MaxTeamNum,
+  SpeedOptions,
+} from '@/lib/constants';
+import { pendingRoomSettingsKey, PendingRoomSettings } from './Lobby';
+import { BattlefieldBackdrop, PageFrame } from './GeneralsUi';
 
-import SliderBox from './SliderBox';
-import PlayerTable from './PlayerTable';
-
-import { forceStartOK, MaxTeamNum, SpeedOptions } from '@/lib/constants';
-import { useGame, useGameDispatch } from '@/context/GameContext';
-
-interface GameSettingProps { }
-
-const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
-  '& .MuiToggleButtonGroup-grouped': {
-    margin: theme.spacing(0.5),
-    border: 0,
-    '&.Mui-disabled': {
-      border: 0,
-    },
-    '&:not(:first-of-type)': {
-      borderRadius: theme.shape.borderRadius,
-    },
-    '&:first-of-type': {
-      borderRadius: theme.shape.borderRadius,
-    },
-  },
-}));
-
-const GameSetting: React.FC<GameSettingProps> = (props) => {
-  const [tabIndex, setTabIndex] = useState(0);
-  const [isNameFocused, setIsNamedFocused] = useState(false);
-  const [shareLink, setShareLink] = useState('');
-  const [forceStart, setForceStart] = useState(false);
-
-  const { room, socketRef, myPlayerId, team } = useGame();
-  const { roomDispatch, snackStateDispatch } = useGameDispatch();
-
-  const { t } = useTranslation();
-
-  const router = useRouter();
-
-  useEffect(() => {
-    setShareLink(window.location.href);
-  }, []);
-
-  const handleRoomNameBlur = (event: any) => {
-    setIsNamedFocused(false);
-    let name = room.roomName;
-
-    const regex = /^[\s\u200B]+$/;
-    if (!name || name === '' || regex.test(name)) {
-      name = 'Untitled';
-      roomDispatch({
-        type: 'update_property',
-        payload: {
-          property: 'roomName',
-          value: name,
-        },
-      });
-    }
-    socketRef.current.emit('change_room_setting', 'roomName', name);
-  };
-
-  const handleTeamChange = (_: Event, newTeam: any) => {
-    socketRef.current.emit('set_team', newTeam);
-  };
-
-  const handleClickForceStart = () => {
-    setForceStart(!forceStart);
-    socketRef.current.emit('force_start');
-  };
-
-  const disabled_ui: boolean = useMemo(() => {
-    // when player is not host
-    if (myPlayerId && room.players) {
-      for (let i = 0; i < room.players.length; ++i) {
-        if (room.players[i].id === myPlayerId) {
-          return !room.players[i].isRoomHost;
-        }
-      }
-    }
-    return true;
-  }, [myPlayerId, room]);
-
-  const handleRoomNameChange = (event: any) => {
-    roomDispatch({
-      type: 'update_property',
-      payload: {
-        property: 'roomName',
-        value: event.target.value,
-      },
-    });
-  };
-
-  const handleSettingChange =
-    (property: string) => (event: Event, newValue: any) => {
-      console.log(`change_room_setting: ${property}, ${newValue}`);
-      if (property === 'gameSpeed') newValue = Number.parseFloat(newValue);
-      roomDispatch({
-        type: 'update_property',
-        payload: {
-          property: property,
-          value: newValue,
-        },
-      });
-      socketRef.current.emit('change_room_setting', property, newValue);
-    };
-  const handleChangeHost = (playerId: string, username: string) => {
-    console.log(`change host to ${username}, id ${playerId}`);
-    socketRef.current.emit('change_host', playerId);
-  };
-
-  const handleLeaveRoom = () => {
-    console.log('Leave Room');
-    localStorage.removeItem(`generals.player-session.${room.id}`);
-    socketRef.current.disconnect();
-    router.push(`/`);
-  };
-
+function SettingRow({ label, value }: { label: string; value: string }) {
   return (
-    <Box
-      sx={{
-        width: {
-          xs: '90vw',
-          md: '55vw',
-          lg: '45vw',
-        },
-      }}
-    >
-      <Card
-        className='menu-container'
-        sx={{
-          boxShadow: 'unset',
-          mb: 1,
-          '& .MuiCardHeader-root': {
-            padding: '0.6rem',
-          },
-        }}
-      >
-        <CardHeader
-          avatar={
-            <IconButton onClick={handleLeaveRoom} color='primary'>
-              <ArrowBackRoundedIcon />
-            </IconButton>
-          }
-          title={
-            !isNameFocused || disabled_ui ? (
-              <div
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  zIndex: 100,
-                }}
-                onClick={() => {
-                  !disabled_ui && setIsNamedFocused(true);
-                }}
-              >
-                <Typography fontWeight='bold' color='primary' fontSize='20px'>
-                  {room.roomName}
-                </Typography>
-              </div>
-            ) : (
-              <TextField
-                autoFocus
-                variant='standard'
-                inputProps={{ style: { fontSize: '20px' } }}
-                value={room.roomName}
-                onChange={handleRoomNameChange}
-                onBlur={handleRoomNameBlur}
-                disabled={disabled_ui}
-              />
-            )
-          }
-          action={
-            <IconButton
-              color='primary'
-              onClick={() => {
-                navigator.clipboard.writeText(shareLink);
-                snackStateDispatch({
-                  type: 'update',
-                  title: '',
-                  message: t('copied'),
-                  status: 'success',
-                  duration: 3000,
-                });
-              }}
-            >
-              <ShareIcon />
-            </IconButton>
-          }
-          sx={{ padding: 'sm' }}
-        />
-        <CardContent
-          className='menu-container'
-          sx={{
-            p: 0,
-            '&:last-child': { pb: 0 },
-          }}
-        >
-          {disabled_ui && (
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Typography variant='caption' align='center'>
-                {t('not-host')}
-              </Typography>
-            </Box>
-          )}
-          <Tabs
-            value={tabIndex}
-            onChange={(event, value) => setTabIndex(value)}
-            variant='scrollable'
-            indicatorColor='primary'
-            scrollButtons
-            allowScrollButtonsMobile
-            textColor='inherit'
-            aria-label='game settings tabs'
-          >
-            <Tab label={t('team')} />
-            <Tab label={t('game')} />
-            <Tab label={t('map')} />
-            <Tab label={t('terrain')} />
-            <Tab label={t('modifiers')} />
-          </Tabs>
-          <TabPanel value={tabIndex} index={0}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
-              <Typography
-                sx={{
-                  mr: 2,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {t('select-your-team')}
-              </Typography>
-              <StyledToggleButtonGroup
-                color='primary'
-                value={team}
-                exclusive
-                // @ts-ignore
-                onChange={handleTeamChange}
-                aria-label='select-team'
-                sx={{ maxWidth: '100%', overflowX: 'auto' }}
-              >
-                {Array.from({ length: MaxTeamNum }, (_, i) => i + 1).map(
-                  (value) => (
-                    <ToggleButton key={value} value={value}>
-                      <Typography>{value}</Typography>
-                    </ToggleButton>
-                  )
-                )}
-                <ToggleButton key={MaxTeamNum + 1} value={MaxTeamNum + 1}>
-                  <Typography>spectators</Typography>
-                </ToggleButton>
-              </StyledToggleButtonGroup>
-            </Box>
-          </TabPanel>
-          <TabPanel value={tabIndex} index={1}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  my: 1,
-                }}
-              >
-                <Typography
-                  sx={{
-                    mr: 2,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {t('game-speed')}
-                </Typography>
-                <ToggleButtonGroup
-                  color='primary'
-                  value={room.gameSpeed}
-                  exclusive
-                  // @ts-ignore
-                  onChange={handleSettingChange('gameSpeed')}
-                  aria-label='game-speed'
-                  disabled={disabled_ui}
-                >
-                  {SpeedOptions.map((value) => (
-                    <ToggleButton key={value} value={value}>
-                      <Typography>{`${value}x`}</Typography>
-                    </ToggleButton>
-                  ))}
-                </ToggleButtonGroup>
-              </Box>
-            </Box>
-          </TabPanel>
-          <TabPanel value={tabIndex} index={2}>
-            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-              <SliderBox
-                label={t('height')} // game's width and height is reversed
-                value={room.mapWidth}
-                disabled={disabled_ui}
-                handleChange={handleSettingChange('mapWidth')}
-              />
-              <SliderBox
-                label={t('width')} // game's width and height is reversed
-                value={room.mapHeight}
-                disabled={disabled_ui}
-                handleChange={handleSettingChange('mapHeight')}
-              />
-            </Box>
-          </TabPanel>
-          <TabPanel value={tabIndex} index={3}>
-            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-              <SliderBox
-                label={t('mountain')}
-                value={room.mountain}
-                disabled={disabled_ui}
-                handleChange={handleSettingChange('mountain')}
-                icon={<TerrainIcon />}
-              />
-              <SliderBox
-                label={t('city')}
-                value={room.city}
-                disabled={disabled_ui}
-                handleChange={handleSettingChange('city')}
-                icon={<LocationCityIcon />}
-              />
-              <SliderBox
-                label={t('swamp')}
-                value={room.swamp}
-                disabled={disabled_ui}
-                handleChange={handleSettingChange('swamp')}
-                icon={<WaterIcon />}
-              />
-            </Box>
-          </TabPanel>
-          <TabPanel value={tabIndex} index={4}>
-            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-              <SliderBox
-                label={t('max-player-num')}
-                value={room.maxPlayers}
-                valueLabelDisplay='auto'
-                disabled={disabled_ui}
-                min={2}
-                max={12}
-                step={1}
-                marks={Array.from({ length: 11 }, (_, i) => ({
-                  value: i + 2,
-                  label: `${i + 2}`,
-                }))}
-                handleChange={handleSettingChange('maxPlayers')}
-              />
-              <FormGroup sx={{ display: 'flex', flexDirection: 'row' }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={room.fogOfWar}
-                      // @ts-ignore
-                      onChange={handleSettingChange('fogOfWar')}
-                      disabled={disabled_ui}
-                    />
-                  }
-                  label={t('fog-of-war')}
-                />
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={room.revealKing}
-                      // @ts-ignore
-                      onChange={handleSettingChange('revealKing')}
-                      disabled={disabled_ui}
-                    />
-                  }
-                  label={t('reveal-king')}
-                />
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={room.deathSpectator}
-                      // @ts-ignore
-                      onChange={handleSettingChange('deathSpectator')}
-                      disabled={disabled_ui}
-                    />
-                  }
-                  label={t('death-spectator')}
-                />
-
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={room.warringStatesMode}
-                      // @ts-ignore
-                      onChange={handleSettingChange('warringStatesMode')}
-                      disabled={disabled_ui}
-                    />
-                  }
-                  label={t('warring-states-mode')}
-                />
-              </FormGroup>
-            </Box>
-          </TabPanel>
-        </CardContent>
-      </Card>
-      <Card
-        className='menu-container'
-        sx={{
-          boxShadow: 'unset',
-          mb: 2,
-          '& .MuiCardHeader-root': {
-            paddingTop: '0rem',
-          },
-        }}
-      >
-        <CardHeader
-          avatar={<GroupIcon color='primary' />}
-          title={
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <Typography color='primary' fontWeight='bold'>
-                {t('players')}
-              </Typography>
-            </Box>
-          }
-          sx={{ padding: 'sm' }}
-        />
-        <CardContent
-          sx={{
-            padding: 0,
-            '&:last-child': { pb: 0 },
-          }}
-        >
-          <PlayerTable
-            myPlayerId={myPlayerId}
-            players={room.players}
-            handleChangeHost={handleChangeHost}
-            disabled_ui={disabled_ui}
-            warringStatesMode={room.warringStatesMode}
-          />
-        </CardContent>
-      </Card>
-      <Button
-        variant='contained'
-        color={forceStart ? 'primary' : 'secondary'}
-        disabled={team === MaxTeamNum + 1}
-        size='large'
-        sx={{
-          width: '100%',
-          height: '60px',
-          fontSize: '20px',
-        }}
-        onClick={handleClickForceStart}
-      >
-        {/* {t('force-start')}({room.forceStartNum}/ */}
-        {t('ready')}({room.forceStartNum}/
-        {
-          forceStartOK[
-          room.players.filter((player) => !player.spectating).length
-          ]
-        }
-        )
-      </Button>
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-        }}
-      ></Box>
-    </Box>
-  );
-};
-
-function TabPanel(props: any) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role='tabpanel'
-      hidden={value !== index}
-      id={`tabpanel-${index}`}
-      aria-labelledby={`tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ p: '1rem' }}>{children}</Box>}
+    <div className='g-setting-row'>
+      <span>{label}</span>
+      <b>{value}</b>
     </div>
   );
 }
 
-export default GameSetting;
+export default function GameSetting({ chat }: { chat?: ReactNode }) {
+  const router = useRouter();
+  const { room, socketRef, myPlayerId, team } = useGame();
+  const [copied, setCopied] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [leaving, setLeaving] = useState(false);
+  const me = useMemo(
+    () => room.players.find((player) => player.id === myPlayerId),
+    [room.players, myPlayerId]
+  );
+  const isHost = Boolean(me?.isRoomHost);
+  const activePlayers = room.players.filter(
+    (player) => player.team !== MaxTeamNum + 1
+  );
+  const readyNeeded = forceStartOK[activePlayers.length] || 2;
+
+  useEffect(() => {
+    setNameDraft(room.roomName);
+  }, [room.roomName]);
+
+  useEffect(() => {
+    // The create form precedes room membership. Apply its validated settings once
+    // the creator has joined as host, using the existing Socket.IO setting event.
+    if (!isHost || room.gameStarted || !socketRef.current?.connected) return;
+    const key = pendingRoomSettingsKey(room.id);
+    const saved = sessionStorage.getItem(key);
+    if (!saved) return;
+    sessionStorage.removeItem(key);
+    try {
+      const settings = JSON.parse(saved) as PendingRoomSettings;
+      (Object.keys(settings) as (keyof PendingRoomSettings)[]).forEach(
+        (property) => {
+          if (settings[property] !== room[property])
+            socketRef.current.emit(
+              'change_room_setting',
+              property,
+              settings[property]
+            );
+        }
+      );
+    } catch {
+      /* Invalid local draft is discarded; server defaults remain. */
+    }
+  }, [isHost, room, socketRef]);
+
+  const emitSetting = (
+    property: keyof PendingRoomSettings,
+    value: string | number | boolean
+  ) => {
+    if (!isHost || room.gameStarted) return;
+    socketRef.current.emit('change_room_setting', property, value);
+  };
+
+  const leave = () => {
+    if (leaving) return;
+    setLeaving(true);
+    const socket = socketRef.current;
+    const finish = (confirmed: boolean) => {
+      if (confirmed) localStorage.removeItem(`generals.player-session.${room.id}`);
+      socket?.disconnect();
+      void router.push('/play');
+    };
+    if (!socket?.connected) {
+      finish(false);
+      return;
+    }
+    socket.timeout(1500).emit('leave_room', (error: Error | null, result?: { ok: boolean }) => {
+      if (!error && result?.ok === false) {
+        setLeaving(false);
+        return;
+      }
+      finish(!error && result?.ok === true);
+    });
+  };
+
+  const copyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(room.id);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <PageFrame online={Boolean(socketRef.current?.connected)}>
+      <BattlefieldBackdrop compact>
+        <div className='g-wait-banner'>
+          <button className='g-wait-back' onClick={leave}>
+            <ArrowBackIcon fontSize='small' />
+            Back to Rooms
+          </button>
+          <h1>
+            Room: {room.roomName}{' '}
+            <span className='g-status-badge'>Waiting for Players</span>
+          </h1>
+          <div className='g-room-code'>
+            Room Code: <b>{room.id}</b>
+            <button
+              className='g-button g-button-outline'
+              onClick={copyCode}
+              aria-label='Copy room code'
+            >
+              <ContentCopyOutlinedIcon fontSize='small' />
+            </button>
+          </div>
+          <p>
+            {copied
+              ? 'Copied to clipboard'
+              : 'Share this code with your friends to invite them.'}
+          </p>
+        </div>
+      </BattlefieldBackdrop>
+      <main className='g-wait-main'>
+        <div className='g-wait-grid'>
+          <section className='g-panel g-wait-players'>
+            <h2>
+              <PeopleOutlineIcon />
+              Players ({room.players.length} / {room.maxPlayers})
+            </h2>
+            <div className='g-player-slots'>
+              {Array.from({ length: room.maxPlayers }, (_, index) => {
+                const player = room.players[index];
+                return (
+                  <div className='g-player-slot' key={player?.id || index}>
+                    <b>{index + 1}</b>
+                    {player ? (
+                      <>
+                        <i style={{ background: ColorArr[player.color] }} />
+                        <div>
+                          <strong>
+                            {player.username}{' '}
+                            {player.isRoomHost && <small>Host</small>}
+                          </strong>
+                          <span className={player.forceStart ? 'ready' : ''}>
+                            {player.disconnected
+                              ? 'Disconnected'
+                              : player.team === MaxTeamNum + 1
+                                ? 'Spectator'
+                                : player.forceStart
+                                  ? 'Ready'
+                                  : 'Not Ready'}
+                          </span>
+                        </div>
+                        {player.isRoomHost && (
+                          <MilitaryTechOutlinedIcon className='g-player-crown' />
+                        )}
+                        {isHost && player.id !== myPlayerId && (
+                          <button
+                            title='Transfer host'
+                            className='g-host-transfer'
+                            onClick={() =>
+                              socketRef.current.emit('change_host', player.id)
+                            }
+                          >
+                            Make host
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <span className='g-muted'>Waiting for player...</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className='g-team-picker'>
+              <label htmlFor='team-select'>Your team</label>
+              <Select
+                id='team-select'
+                value={team || ''}
+                disabled={!me || room.gameStarted}
+                onChange={(event) =>
+                  socketRef.current.emit('set_team', Number(event.target.value))
+                }
+                size='small'
+                displayEmpty
+                sx={{
+                  color: '#f0f5f8',
+                  background: 'rgba(3, 13, 21, .55)',
+                  borderRadius: '5px',
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(104,148,171,.34)' },
+                  '& .MuiSvgIcon-root': { color: '#d9b765' },
+                }}
+                MenuProps={{ PaperProps: { sx: { maxHeight: 290, background: '#0b1a27', color: '#f0f5f8', border: '1px solid rgba(104,148,171,.34)' } } }}
+              >
+                <MenuItem value='' disabled>
+                  Choose team
+                </MenuItem>
+                {Array.from({ length: MaxTeamNum }, (_, index) => (
+                  <MenuItem key={index} value={index + 1}>
+                    Team {index + 1}
+                  </MenuItem>
+                ))}
+                <MenuItem value={MaxTeamNum + 1}>Spectators</MenuItem>
+              </Select>
+            </div>
+          </section>
+          <section className='g-wait-chat'>{chat}</section>
+          <section className='g-panel g-wait-settings'>
+            <h2>
+              <SettingsOutlinedIcon />
+              Room Settings
+            </h2>
+            <SettingRow
+              label='Game Mode'
+              value={room.warringStatesMode ? 'Warring States' : 'Standard'}
+            />
+            <SettingRow label='Game Speed' value={`${room.gameSpeed}×`} />
+            <SettingRow label='Map Width' value={room.mapWidth.toFixed(2)} />
+            <SettingRow label='Map Height' value={room.mapHeight.toFixed(2)} />
+            <SettingRow
+              label='Mountains Density'
+              value={room.mountain.toFixed(2)}
+            />
+            <SettingRow label='Cities Density' value={room.city.toFixed(2)} />
+            <SettingRow label='Swamps Density' value={room.swamp.toFixed(2)} />
+            <SettingRow
+              label='Players'
+              value={`${room.players.length}/${room.maxPlayers}`}
+            />
+            {isHost && (
+              <button
+                className='g-button g-button-outline g-edit-settings'
+                onClick={() => setShowEditor((open) => !open)}
+              >
+                {showEditor ? 'Close Settings' : 'Edit Settings'}
+              </button>
+            )}
+            {isHost && showEditor && (
+              <div className='g-settings-editor'>
+                <label>
+                  Room Name
+                  <input
+                    className='g-input'
+                    maxLength={20}
+                    value={nameDraft}
+                    onChange={(event) => setNameDraft(event.target.value)}
+                    onBlur={() => {
+                      if (nameDraft.trim())
+                        emitSetting('roomName', nameDraft.trim());
+                    }}
+                  />
+                </label>
+                <label>
+                  Max Players
+                  <select
+                    className='g-select'
+                    value={room.maxPlayers}
+                    onChange={(event) =>
+                      emitSetting('maxPlayers', Number(event.target.value))
+                    }
+                  >
+                    {Array.from({ length: 11 }, (_, index) => index + 2).map(
+                      (count) => (
+                        <option key={count} value={count}>
+                          {count}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </label>
+                <label>
+                  Game Speed
+                  <select
+                    className='g-select'
+                    value={room.gameSpeed}
+                    onChange={(event) =>
+                      emitSetting('gameSpeed', Number(event.target.value))
+                    }
+                  >
+                    {SpeedOptions.map((speed) => (
+                      <option key={speed} value={speed}>
+                        {speed}×
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {(
+                  [
+                    'mapWidth',
+                    'mapHeight',
+                    'mountain',
+                    'city',
+                    'swamp',
+                  ] as const
+                ).map((key) => (
+                  <label key={`${key}-${room[key]}`}>
+                    {key}
+                    <input
+                      type='range'
+                      min='0'
+                      max='1'
+                      step='.05'
+                      defaultValue={room[key]}
+                      onPointerUp={(event) =>
+                        emitSetting(key, Number(event.currentTarget.value))
+                      }
+                      onKeyUp={(event) =>
+                        emitSetting(key, Number(event.currentTarget.value))
+                      }
+                    />
+                  </label>
+                ))}
+                {(
+                  [
+                    'fogOfWar',
+                    'deathSpectator',
+                    'revealKing',
+                    'warringStatesMode',
+                  ] as const
+                ).map((key) => (
+                  <label className='g-editor-check' key={key}>
+                    <input
+                      type='checkbox'
+                      checked={room[key]}
+                      onChange={(event) =>
+                        emitSetting(key, event.target.checked)
+                      }
+                    />
+                    {key}
+                  </label>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+        <div className='g-wait-actions'>
+          <div>
+            <button
+              className={`g-button ${me?.forceStart ? 'g-button-outline' : 'g-button-ready'}`}
+              disabled={!me || me.team === MaxTeamNum + 1}
+              onClick={() => socketRef.current.emit('force_start')}
+            >
+              <CheckCircleOutlineIcon />
+              {me?.forceStart ? 'Not Ready' : 'Ready'}
+            </button>
+            <small>
+              {room.forceStartNum}/{readyNeeded} ready votes; match starts automatically
+            </small>
+          </div>
+          <div>
+            <button
+              className='g-button'
+              style={{
+                background: room.forceStartNum >= readyNeeded ? 'rgba(40,104,216,0.15)' : 'rgba(8, 21, 33, 0.7)',
+                borderColor: room.forceStartNum >= readyNeeded ? 'var(--g-border)' : 'transparent',
+                color: room.forceStartNum >= readyNeeded ? 'var(--g-muted)' : 'rgba(255,255,255,0.4)',
+                cursor: room.forceStartNum >= readyNeeded ? 'default' : 'not-allowed'
+              }}
+              role='status'
+            >
+              <PlayArrowIcon /> Start Game
+            </button>
+            <small>Host can start when all players are ready</small>
+          </div>
+          <div>
+            <button className='g-button g-button-danger' onClick={leave}>
+              <LogoutOutlinedIcon />
+              Leave Room
+            </button>
+            <small>You can leave anytime</small>
+          </div>
+        </div>
+      </main>
+    </PageFrame>
+  );
+}

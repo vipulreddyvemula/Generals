@@ -127,7 +127,7 @@ export const mapQueueDataReducer = (state: MapQueueData, action: any) => {
 };
 
 interface SnackAction {
-  type: 'update' | 'toggle';
+  type: 'update' | 'toggle' | 'close';
   open?: boolean;
   title?: string;
   message?: string;
@@ -150,6 +150,8 @@ export const snackStateReducer = (
       };
     case 'toggle':
       return { ...state, open: !state.open };
+    case 'close':
+      return { ...state, open: false };
     default:
       throw Error('Unknown action: ' + action.type);
   }
