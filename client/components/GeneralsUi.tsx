@@ -60,19 +60,23 @@ export function HowToPlayModal({
           ×
         </button>
         <h2>How to Play</h2>
+        <p>
+          <b>Goal:</b> Capture enemy territory and defeat their General while protecting your own.
+        </p>
+        <p>
+          <b>Move:</b> Select your territory and move troops to an adjacent tile. Attack enemies to capture their land.
+        </p>
+        <p>
+          <b>Grow:</b> Your territories generate troops over time. Cities and Generals generate troops faster.
+        </p>
+        <p>
+          <b>Commander:</b> Earn Energy by completing Math and Codeforces challenges, then use it for special abilities.
+        </p>
+        <p>
+          <b>Win:</b> Capture the enemy General to eliminate that player. The last surviving player/team wins.
+        </p>
         <p className='g-muted'>
-          Claim territory, grow your army, and capture enemy generals.
-        </p>
-        <p>
-          <b>1. Expand.</b> Select your territory, then choose an adjacent tile.
-        </p>
-        <p>
-          <b>2. Command.</b> Armies increase each turn. Move all or half your
-          forces.
-        </p>
-        <p>
-          <b>3. Conquer.</b> Capture the opposing general while defending your
-          own.
+          <b>Tip:</b> Balance expansion, defense, and troop management—one mistake can expose your General.
         </p>
       </div>
     </div>

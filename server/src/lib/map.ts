@@ -312,7 +312,7 @@ class GameMap {
 
   updateTurn(): void {
     this.turn++;
-    
+
     // Process Commander Effects
     for (let i = this.activeEffects.length - 1; i >= 0; i--) {
       const effect = this.activeEffects[i];
@@ -341,19 +341,19 @@ class GameMap {
       for (let j = 0; j < this.height; j++) {
         switch (this.map[i][j].type) {
           case TileType.Plain:
-            if (this.map[i][j].player && this.turn % 50 === 0)
+            if (this.map[i][j].player && this.turn % 800 === 0)
               this.map[i][j].unit += 1;
             break;
           case TileType.King:
-            if (this.turn % 2 === 0)
+            if (this.turn % 32 === 0)
               this.map[i][j].unit += 1;
             break;
           case TileType.City:
-            if (this.map[i][j].player && this.turn % 2 === 0)
+            if (this.map[i][j].player && this.turn % 32 === 0)
               this.map[i][j].unit += 1;
             break;
           case TileType.Swamp:
-            if (this.map[i][j].player && this.turn % 2 === 0)
+            if (this.map[i][j].player && this.turn % 32 === 0)
               this.map[i][j].unit = Math.max(0, this.map[i][j].unit - 1);
             if (this.map[i][j].unit <= 0) {
               this.map[i][j].unit = 0;
@@ -471,7 +471,7 @@ class GameMap {
         }
       }
     }
-    
+
     // Process Scout Effects for this player
     for (const effect of this.activeEffects) {
       if (effect.type === EffectType.Scout && effect.player.team === player.team) {

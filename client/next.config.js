@@ -10,6 +10,7 @@ if (
 
 const nextConfig = {
   i18n,
+  distDir: process.env.GENERALS_NEXT_DIST_DIR || '.next',
   reactStrictMode: false,
   swcMinify: true,
   output: 'standalone',

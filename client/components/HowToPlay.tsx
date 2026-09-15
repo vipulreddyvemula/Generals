@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useTranslation } from 'next-i18next';
 import {
-  Button,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -11,13 +10,14 @@ import {
   TableHead,
   TableRow,
   Typography,
+  Box,
 } from '@mui/material';
 import Image from 'next/image';
 import { TileType, TileType2Image } from '@/lib/types';
 
 interface HowToPlayProps {
   show: boolean;
-  toggleShow: any;
+  toggleShow: () => void;
 }
 
 const HowToPlay: React.FC<HowToPlayProps> = ({ show, toggleShow }) => {
@@ -38,64 +38,73 @@ const HowToPlay: React.FC<HowToPlayProps> = ({ show, toggleShow }) => {
   ];
 
   return (
-    <div>
-      <Dialog open={show} onClose={toggleShow}>
-        <DialogTitle>{t('howToPlay.title')}</DialogTitle>
-        <DialogContent>
-          <div>
-            <div style={{ display: 'flex' }}>
-              <Typography variant='body1'>{t('howToPlay.goal')}</Typography>
-              <Image
-                src={TileType2Image[TileType.King]}
-                alt='king'
-                width='20'
-                height='20'
-                style={{
-                  backgroundColor: 'white',
-                }}
-              />
-            </div>
+    <Dialog open={show} onClose={toggleShow} maxWidth="md" fullWidth>
+      <DialogTitle>{t('howToPlay.title')}</DialogTitle>
+      <DialogContent>
+        <Box sx={{ mb: 3, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Typography variant='body1'>
+            <strong>{t('howToPlay.goalLabel')}:</strong> {t('howToPlay.goal')}
+            <Image
+              src={TileType2Image[TileType.King]}
+              alt='king'
+              width='18'
+              height='18'
+              style={{
+                backgroundColor: 'white',
+                verticalAlign: 'middle',
+                marginLeft: '6px',
+              }}
+            />
+          </Typography>
+          <Typography variant='body1'>
+            <strong>{t('howToPlay.moveLabel')}:</strong> {t('howToPlay.moveText')}
+          </Typography>
+          <Typography variant='body1'>
+            <strong>{t('howToPlay.growLabel')}:</strong> {t('howToPlay.grow')}
+            <Image
+              src={TileType2Image[TileType.City]}
+              alt='city'
+              width='18'
+              height='18'
+              style={{
+                backgroundColor: 'white',
+                verticalAlign: 'middle',
+                marginLeft: '6px',
+              }}
+            />
+          </Typography>
+          <Typography variant='body1'>
+            <strong>{t('howToPlay.commanderLabel')}:</strong> {t('howToPlay.commander')}
+          </Typography>
+          <Typography variant='body1'>
+            <strong>{t('howToPlay.winLabel')}:</strong> {t('howToPlay.win')}
+          </Typography>
+          <Typography variant='body1' sx={{ fontStyle: 'italic', color: 'text.secondary', mt: 0.5 }}>
+            <strong>{t('howToPlay.tipLabel')}:</strong> {t('howToPlay.tip')}
+          </Typography>
+        </Box>
 
-            <ul>
-              <li>{t('howToPlay.plains')}</li>
-              <li>
-                <div style={{ display: 'flex' }}>
-                  <Image
-                    src={TileType2Image[TileType.City]}
-                    alt='king'
-                    width='20'
-                    height='20'
-                    style={{
-                      backgroundColor: 'white',
-                    }}
-                  />
-                  {t('howToPlay.cities')}
-                </div>
-              </li>
-              <li>{t('howToPlay.moves')}</li>
-              <li>{t('howToPlay.capture')}</li>
-            </ul>
-            <Typography variant='body1'>{t('howToPlay.shortcut')}</Typography>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>{t('howToPlay.shortcut')}</TableCell>
-                  <TableCell>{t('howToPlay.key')}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {tableData.map((row, index) => (
-                  <TableRow key={index}>
-                    <TableCell>{row.label}</TableCell>
-                    <TableCell>{row.value}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+        <Typography variant='h6' sx={{ mb: 1, mt: 2 }}>
+          {t('howToPlay.shortcut')}
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell><strong>{t('howToPlay.shortcut')}</strong></TableCell>
+              <TableCell><strong>{t('howToPlay.key')}</strong></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {tableData.map((row, index) => (
+              <TableRow key={index}>
+                <TableCell>{row.label}</TableCell>
+                <TableCell>{row.value}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </DialogContent>
+    </Dialog>
   );
 };
 
