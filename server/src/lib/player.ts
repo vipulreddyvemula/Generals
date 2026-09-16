@@ -18,7 +18,17 @@ class Player {
     public isRoomHost: boolean = false,
     public forceStart: boolean = false, // if ready
     public isDead: boolean = false,
+    /**
+     * operatedTurn — the turn on which this player last issued a move command.
+     * Used exclusively to prevent multiple moves in the same turn (per-turn dedup).
+     * Do NOT use this for AFK detection; use lastMoveTurn instead.
+     */
     public operatedTurn: number = 0,
+    /**
+     * lastMoveTurn — the turn on which this player last issued any move (attack)
+     * command. Used solely for AFK elimination logic.
+     */
+    public lastMoveTurn: number = 0,
     public land: Block[] = [],
     public king: Block | null = null,
     public patchView: MapDiff | null = null,
@@ -88,6 +98,7 @@ class Player {
     this.forceStart = false;
     this.isDead = false;
     this.operatedTurn = 0;
+    this.lastMoveTurn = 0;
     this.land = [];
     this.king = null;
     this.patchView = null;

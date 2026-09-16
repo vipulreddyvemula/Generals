@@ -1,11 +1,13 @@
-FROM node:16-alpine
+# node:22-alpine — Active LTS, supported through April 2027.
+# Do NOT use node:16 (reached EOL September 2023).
+FROM node:22-alpine
 
 WORKDIR /app
 
 COPY package*.json ./
-COPY prisma ./prisma/
 
-RUN npm install
+# --omit=dev excludes devDependencies from the production image.
+RUN npm ci --omit=dev
 
 COPY . .
 

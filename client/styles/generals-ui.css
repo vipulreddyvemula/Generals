@@ -398,10 +398,10 @@
   color: var(--g-muted);
 }
 
-.g-modal-backdrop {
+.g-modal-backdrop { 
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 1300;
   display: grid;
   place-items: center;
   padding: 20px;
@@ -442,6 +442,135 @@
   border: 0;
   color: #fff;
   font-size: 26px !important;
+}
+
+/* How to Play modal — scrollable expanded content */
+.g-modal-htp {
+  display: flex;
+  flex-direction: column;
+  max-height: min(90vh, 680px);
+  width: min(100%, 580px);
+  padding-bottom: 20px;
+}
+
+.g-modal-htp > h2 {
+  flex: 0 0 auto;
+}
+
+.g-modal-htp-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding-right: 8px;
+  margin-top: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-gold) transparent;
+}
+
+.g-modal-htp-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.g-modal-htp-body::-webkit-scrollbar-thumb {
+  background: var(--g-gold);
+  border-radius: 3px;
+}
+
+.g-modal-htp-body h3 {
+  margin: 20px 0 6px;
+  font:
+    700 14px Cinzel,
+    serif;
+  color: var(--g-gold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.g-modal-htp-body h3:first-child {
+  margin-top: 8px;
+}
+
+.g-modal-htp-body p {
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+
+.g-modal-htp-body ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  line-height: 1.6;
+}
+
+.g-modal-htp-body li {
+  margin-top: 4px;
+}
+
+.g-htp-example {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--g-gold);
+  background: rgba(217, 183, 101, 0.07);
+  border-radius: 0 4px 4px 0;
+}
+
+.g-htp-example > span {
+  display: block;
+  font:
+    700 11px Cinzel,
+    serif;
+  color: var(--g-gold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.g-htp-example p {
+  margin: 4px 0 0;
+}
+
+.g-htp-table-wrap {
+  overflow-x: auto;
+  margin-top: 10px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.g-htp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.g-htp-table th {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--g-gold);
+  color: var(--g-gold);
+  font:
+    700 12px Cinzel,
+    serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.g-htp-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(104, 148, 171, 0.15);
+  white-space: nowrap;
+}
+
+.g-htp-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.g-htp-table td b {
+  color: var(--g-gold);
+}
+
+@media (max-width: 600px) {
+  .g-modal-htp {
+    max-height: 85vh;
+    padding: 22px 18px 16px;
+  }
 }
 
 /* Home and player details mirror the four-page prototype's centered hero. */

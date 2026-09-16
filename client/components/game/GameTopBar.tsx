@@ -5,7 +5,8 @@ import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
 import HourglassEmptyOutlinedIcon from '@mui/icons-material/HourglassEmptyOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import SignalCellularAltIcon from '@mui/icons-material/SignalCellularAlt';
-import { Brand, CrownMark, Status } from '@/components/GeneralsUi';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import { Brand, CrownMark, HowToPlayModal, Status } from '@/components/GeneralsUi';
 import { useGame } from '@/context/GameContext';
 
 export default function GameTopBar({
@@ -17,6 +18,7 @@ export default function GameTopBar({
   const [ping, setPing] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [htpOpen, setHtpOpen] = useState(false);
   useEffect(() => {
     let alive = true;
     const check = async () => {
@@ -53,6 +55,7 @@ export default function GameTopBar({
     }
   };
   return (
+    <>
     <header className='g-game-topbar'>
       <div className='g-game-top-left'>
         <div className='g-game-brand'>
@@ -111,11 +114,21 @@ export default function GameTopBar({
             </div>
           )}
         </div>
+        <button
+          className='g-button g-button-outline g-icon-button'
+          onClick={() => setHtpOpen(true)}
+          aria-label='How to Play'
+          title='How to Play'
+        >
+          <HelpOutlineIcon />
+        </button>
         <button className='g-button g-button-danger' onClick={onSurrender}>
           <FlagOutlinedIcon />
           Surrender
         </button>
       </div>
     </header>
+    <HowToPlayModal open={htpOpen} onClose={() => setHtpOpen(false)} />
+    </>
   );
 }

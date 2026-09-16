@@ -14,6 +14,9 @@ import { canJoinRoom } from './lib/event-limits';
 import { resetRoomRuntime, runRoomTick, startRoomOnce } from './lib/room-runtime';
 import { eventMetrics } from './lib/observability';
 import { SESSION_CLAIM_POLICY, SESSION_IP_POLICY, SOCKET_EVENT_POLICIES, SocketRateLimiter } from './lib/socket-rate-limit';
+
+// HTTP-layer rate-limit policy for /create_room (per remote IP).
+const CREATE_ROOM_HTTP_POLICY = { burst: 5, refillMs: 60_000 };
 import {
   Room,
   initGameInfo,
@@ -61,8 +64,16 @@ if (!process.env.CLIENT_URL || !process.env.PORT) {
 }
 
 const app = express();
+// Trust the first proxy hop so req.ip reflects the real client IP behind
+// a reverse proxy / load balancer in production.
+app.set('trust proxy', 1);
 const cors_urls = process.env.CLIENT_URL == '*' ? '*' : process.env.CLIENT_URL.split(' ');
 console.log(cors_urls);
+
+if (process.env.NODE_ENV === 'production' && cors_urls === '*') {
+  console.warn('[SECURITY] CLIENT_URL is set to wildcard (*) in production. ' +
+    'Set CLIENT_URL to your explicit frontend origin(s) to enforce CORS.');
+}
 
 app.use(express.json());
 app.use(cors({ origin: cors_urls }));
@@ -75,7 +86,14 @@ app.get('/get_rooms', (req: Request, res: Response) => {
   res.status(200).json(roomPool);
 });
 
+const httpRateLimiter = new SocketRateLimiter();
+
 app.get('/create_room', async (req: Request, res: Response) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  if (!httpRateLimiter.allow(`http:${ip}`, 'create_room', CREATE_ROOM_HTTP_POLICY)) {
+    res.status(429).json({ success: false, message: 'Too many room creation requests. Please wait.' });
+    return;
+  }
   const result = await createRoom();
   if (result.success) {
     res.status(200).json(result);
@@ -242,14 +260,19 @@ function finishGame(room: Room, io: Server, gameRecord: GameRecord): boolean {
     outcome.winnerTeam === null
       ? []
       : room.players.filter((player) => player.team === outcome.winnerTeam).map((player) => player.minify(true));
-  let replayLink = '';
-  try {
-    replayLink = gameRecord.outPutToJSON(process.cwd());
-  } catch (error) {
-    console.error('Failed to write game replay:', error);
-  }
 
-  io.in(room.id).emit('game_ended', winners, replayLink);
+  // Emit game_ended immediately (empty replayLink) — do not block on disk I/O.
+  io.in(room.id).emit('game_ended', winners, '');
+
+  // P9: Async replay write — does not block the game loop or the event loop.
+  void gameRecord.outPutToJSON(process.cwd())
+    .then((replayLink) => {
+      io.in(room.id).emit('replay_ready', replayLink);
+    })
+    .catch((error) => {
+      console.error('Failed to write game replay:', error);
+    });
+
   cleanupFinishedRoom(room);
   io.in(room.id).emit('update_room', room);
   if (room.players.length === 0 && !room.keepAlive) delete roomPool[room.id];
@@ -316,9 +339,16 @@ function handleDisconnectInRoom(room: Room, player: Player, socketId: string, io
 }
 
 async function checkForcedStart(room: Room, io: Server) {
-  const forceStartNum = forceStartOK[room.players.filter((player) => !player.spectating()).length];
+  const activePlayers = room.players.filter((player) => !player.spectating());
+  const forceStartNum = forceStartOK[activePlayers.length];
 
   if (!room.gameStarted && room.forceStartNum >= forceStartNum) {
+    // P6: Require at least two distinct teams among active players.
+    const activeTeams = new Set(activePlayers.map((player) => player.team));
+    if (activeTeams.size < 2) {
+      io.in(room.id).emit('error', 'Match cannot start', 'All active players are on the same team. Assign players to at least two teams.');
+      return;
+    }
     try {
       await startRoomOnce(room, () => handleGame(room, io));
     } catch (error) {
@@ -406,22 +436,31 @@ function handleGame(room: Room, io: Server): void {
             const blockPlayerIndex = getPlayerIndex(room, block.player?.id);
             if (blockPlayerIndex !== -1) {
               if (block.player !== player && player.isDead === false) {
-                console.log(block.player.username, 'captured', player.username);
-                io.in(room.id).emit('captured', block.player.minify(), player.minify());
+                const captor = room.players[blockPlayerIndex];
+                console.log(captor.username, 'captured', player.username);
+                // Emit events BEFORE state mutation so client receives accurate data.
+                io.in(room.id).emit('captured', captor.minify(), player.minify());
                 const player_socket = io.sockets.sockets.get(player.socket_id);
                 if (player_socket) {
-                  player_socket.emit('game_over', block.player.minify()); // captured by block.player
+                  player_socket.emit('game_over', captor.minify());
                 }
-                player.isDead = true;
-                player.land.forEach((block) => {
-                  gameMap.transferBlock(block, room.players[blockPlayerIndex]);
-                  room.players[blockPlayerIndex].winLand(block);
-                });
-                gameMap.getBlock(king).kingBeDominated();
-                player.land.length = 0;
+                // --- ATOMIC ELIMINATION ---
+                // Set isDead = true FIRST via neutralizePlayer so that any
+                // concurrent eligibility check (Codeforces queue, victory calc)
+                // cannot observe the "captured but still alive" intermediate state.
+                // neutralizePlayer clears player.king, player.land, and marks isDead.
+                neutralizePlayer(room, player);
+                // Give the captured king tile to the conqueror (neutralizePlayer
+                // beNeutralizes it, so player === null now; captor claims it).
+                const capturedKingBlock = gameMap.getBlock(king);
+                if (capturedKingBlock.player === null) {
+                  capturedKingBlock.beDominated(captor, capturedKingBlock.unit + 1);
+                  captor.winLand(capturedKingBlock);
+                }
                 if (!room.codeforcesQueue) tryInitializeCodeforcesQueue(room, io);
-              } else if (!player.disconnected && player.operatedTurn === 0 && player.operatedTurn + 160 <= gameMap.turn) {
-                // if player is not operated for 160/2 turns, it will be neutralized
+              } else if (!player.disconnected && gameMap.turn - player.lastMoveTurn >= 2000) {
+                // AFK: no movement for 2000 turns.
+                // lastMoveTurn is updated exclusively by the attack handler.
                 neutralizePlayer(room, player);
                 if (!room.codeforcesQueue) tryInitializeCodeforcesQueue(room, io);
                 io.in(room.id).emit('room_message', player.minify(), 'surrendered');
@@ -829,6 +868,7 @@ io.on('connection', async (socket) => {
           }
 
           actingPlayer.operatedTurn = gameMap.turn;
+          actingPlayer.lastMoveTurn = gameMap.turn;
           socket.emit('attack_success', from, to, gameMap.turn);
         } else {
           socket.emit(

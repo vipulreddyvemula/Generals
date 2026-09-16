@@ -29,11 +29,8 @@ export const COMMANDER_CONFIG = {
   },
   abilities: {
     Scout: { energy: 20 },
-    Blitz: { energy: 30 },
     Reinforce: { energy: 40, troops: 40 },
-    Fortify: { energy: 50 },
     Airstrike: { energy: 60 },
-    'Supply Surge': { energy: 70 },
   },
 } as const;
 

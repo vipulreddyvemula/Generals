@@ -1,10 +1,10 @@
+import crypto from 'crypto';
 import { Room, RoomPool } from './types';
 import { EVENT_LIMITS } from './event-limits';
 
 export const roomPool: RoomPool = Object.create(null);
 
 export const MAX_ROOM_COUNT = EVENT_LIMITS.maxRooms;
-let roomCount = 0;
 
 export async function createRoom(
   roomId: string = '',
@@ -14,8 +14,14 @@ export async function createRoom(
     if (Object.keys(roomPool).length >= MAX_ROOM_COUNT)
       throw new Error('Room count exceeded');
     if (!roomId) {
-      ++roomCount;
-      roomId = String(roomCount + 1);
+      // Collision-safe, unpredictable ID — never clashes with existing rooms.
+      do {
+        roomId = crypto.randomUUID();
+      } while (Object.prototype.hasOwnProperty.call(roomPool, roomId));
+    }
+    // Never overwrite a live room, even when an explicit ID is supplied.
+    if (Object.prototype.hasOwnProperty.call(roomPool, roomId)) {
+      throw new Error(`Room '${roomId}' already exists`);
     }
     const newRoom = new Room(roomId, roomName);
     newRoom.maxPlayers = Math.min(newRoom.maxPlayers, EVENT_LIMITS.maxPlayersPerRoom);
@@ -32,6 +38,7 @@ export async function createRoom(
     };
   }
 }
+
 
 // Bot
 roomPool['1'] = Room.create({

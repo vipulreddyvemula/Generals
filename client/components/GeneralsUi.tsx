@@ -50,7 +50,7 @@ export function HowToPlayModal({
   return (
     <div className='g-modal-backdrop' onClick={onClose} role='presentation'>
       <div
-        className='g-modal'
+        className='g-modal g-modal-htp'
         role='dialog'
         aria-modal='true'
         aria-label='How to Play'
@@ -59,25 +59,118 @@ export function HowToPlayModal({
         <button className='g-modal-close' onClick={onClose} aria-label='Close'>
           ×
         </button>
-        <h2>How to Play</h2>
-        <p>
-          <b>Goal:</b> Capture enemy territory and defeat their General while protecting your own.
-        </p>
-        <p>
-          <b>Move:</b> Select your territory and move troops to an adjacent tile. Attack enemies to capture their land.
-        </p>
-        <p>
-          <b>Grow:</b> Your territories generate troops over time. Cities and Generals generate troops faster.
-        </p>
-        <p>
-          <b>Commander:</b> Earn Energy by completing Math and Codeforces challenges, then use it for special abilities.
-        </p>
-        <p>
-          <b>Win:</b> Capture the enemy General to eliminate that player. The last surviving player/team wins.
-        </p>
-        <p className='g-muted'>
-          <b>Tip:</b> Balance expansion, defense, and troop management—one mistake can expose your General.
-        </p>
+        <h2>HOW TO PLAY</h2>
+        <div className='g-modal-htp-body'>
+          <h3>1. Your Goal</h3>
+          <p>
+            Capture enemy territory and defeat their <b>General</b>. The last
+            surviving General wins.
+          </p>
+
+          <h3>2. Your General</h3>
+          <p>
+            Your General is your most important tile. <b>Protect it!</b>
+          </p>
+          <p>If an enemy captures your General, you are eliminated from the game.</p>
+
+          <h3>3. Move Your Soldiers</h3>
+          <p>
+            Select one of your owned tiles, then select an <b>adjacent tile</b>{' '}
+            to move your soldiers.
+          </p>
+          <p>You can move through your own territory or attack an enemy tile.</p>
+          <p>
+            You can also use <b>W / A / S / D</b> to move around the map.
+          </p>
+          <p>
+            You can move <b>50% of the soldiers on a tile</b> when needed. Press{' '}
+            <b>Z</b> or <b>double-click</b> to toggle 50% movement.
+          </p>
+          <p>
+            You <b>cannot move diagonally</b> or move through <b>Mountains</b>.
+          </p>
+
+          <h3>4. Grow Your Army</h3>
+          <p>Your army grows over time:</p>
+          <ul>
+            <li>
+              <b>General:</b> Produces <b>1 soldier every 16 seconds</b>
+            </li>
+            <li>
+              <b>Plain tile:</b> Produces <b>1 soldier every 400 seconds</b>
+            </li>
+          </ul>
+
+          <h3>5. Capture Territory</h3>
+          <p>
+            Send your soldiers into an enemy-controlled tile to attack it.
+          </p>
+          <p>
+            If you have more soldiers than the defender, you capture the tile
+            and the remaining soldiers stay there.
+          </p>
+          <div className='g-htp-example'>
+            <span>Example</span>
+            <p>
+              You attack with <b>8 soldiers</b> against <b>5 defending soldiers</b>.
+            </p>
+            <p>
+              You capture the tile with <b>3 soldiers remaining</b>.
+            </p>
+          </div>
+
+          <h3>6. Commander</h3>
+          <p>
+            Complete <b>Math</b> and <b>Codeforces</b> challenges to earn{' '}
+            <b>Energy</b>.
+          </p>
+          <p>Spend your Energy to activate these powerful abilities:</p>
+          <ul>
+            <li>
+              <b>Scout — 20 Energy:</b> Reveals the area within a{' '}
+              <b>radius of 2</b> around the selected location.
+            </li>
+            <li>
+              <b>Reinforce — 40 Energy:</b> Adds <b>40 soldiers</b> to one of
+              your owned tiles.
+            </li>
+            <li>
+              <b>Airstrike — 60 Energy:</b> Reduces enemy troops by <b>half</b>{' '}
+              within a <b>radius of 2</b> around the selected location.
+            </li>
+          </ul>
+
+          <h3>7. Victory</h3>
+          <p>
+            Capture the enemy <b>General</b> to eliminate that player.
+          </p>
+
+          <h3>Keyboard Controls</h3>
+          <div className='g-htp-table-wrap'>
+            <table className='g-htp-table'>
+              <thead>
+                <tr>
+                  <th>Function</th>
+                  <th>Keyboard</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Move Around</td><td><b>W / A / S / D</b></td></tr>
+                <tr><td>Move on Mobile</td><td><b>Touch &amp; Drag</b></td></tr>
+                <tr><td>Open Chat</td><td><b>Enter</b></td></tr>
+                <tr><td>Undo Move</td><td><b>E</b></td></tr>
+                <tr><td>Clear Queued Moves</td><td><b>Q</b></td></tr>
+                <tr><td>Select General</td><td><b>G</b></td></tr>
+                <tr><td>Center on Home</td><td><b>H</b></td></tr>
+                <tr><td>Center Map</td><td><b>C</b></td></tr>
+                <tr><td>Toggle 50%</td><td><b>Z</b> / <b>Double Click</b></td></tr>
+                <tr><td>Set Zoom Preset</td><td><b>1 / 2 / 3</b></td></tr>
+                <tr><td>Zoom In / Out</td><td><b>Mouse Wheel</b></td></tr>
+                <tr><td>Surrender</td><td><b>Escape</b></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );
