@@ -943,9 +943,9 @@ export default function CommanderPanel() {
             return (
               <Button
                 key={ability.type}
-                onClick={() => activateAbility(ability.type)}
-                disabled={!affordable}
+                onClick={affordable ? () => activateAbility(ability.type) : undefined}
                 aria-pressed={selected}
+                aria-disabled={!affordable}
                 sx={{
                   minWidth: 0,
                   p: 1.8,
@@ -953,13 +953,15 @@ export default function CommanderPanel() {
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 0.5,
-                  color: affordable ? ability.accent : 'rgba(231,242,252,.24)',
-                  border: `1px solid ${selected ? ability.accent : affordable ? `${ability.accent}55` : 'rgba(255,255,255,.06)'}`,
+                  cursor: affordable ? 'pointer' : 'not-allowed',
+                  color: affordable ? ability.accent : 'rgba(180,200,220,.6)',
+                  border: `1px solid ${selected ? ability.accent : affordable ? `${ability.accent}55` : 'rgba(180,200,220,.25)'}`,
                   borderRadius: '6px',
                   bgcolor: selected
                     ? `${ability.accent}18`
-                    : 'rgba(8,16,28,.72)',
+                    : affordable ? 'rgba(8,16,28,.72)' : 'rgba(8,16,28,.5)',
                   '& svg': { fontSize: 24 },
+                  '&:hover': affordable ? undefined : { bgcolor: 'rgba(8,16,28,.5)' },
                 }}
               >
                 {ability.icon}

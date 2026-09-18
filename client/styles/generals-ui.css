@@ -450,7 +450,9 @@
   flex-direction: column;
   max-height: min(90vh, 680px);
   width: min(100%, 580px);
+  padding-right: 0;
   padding-bottom: 20px;
+  overflow: hidden;
 }
 
 .g-modal-htp > h2 {
@@ -460,14 +462,15 @@
 .g-modal-htp-body {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding-right: 8px;
+  /* keep content indented; scrollbar sits just inside the right border */
+  padding-right: 10px;
   margin-top: 4px;
-  scrollbar-width: thin;
+  scrollbar-width: auto;
   scrollbar-color: var(--g-gold) transparent;
 }
 
 .g-modal-htp-body::-webkit-scrollbar {
-  width: 5px;
+  width: 8px;
 }
 
 .g-modal-htp-body::-webkit-scrollbar-thumb {
@@ -570,6 +573,10 @@
   .g-modal-htp {
     max-height: 85vh;
     padding: 22px 18px 16px;
+    padding-right: 0;
+  }
+  .g-modal-htp-body {
+    padding-right: 8px;
   }
 }
 

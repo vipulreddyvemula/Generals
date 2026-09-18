@@ -60,14 +60,14 @@ export default React.memo(function ChatBox({
   compact = false,
   embedded = false,
 }: ChatBoxProps) {
-  const [open, setOpen] = useState(!compact || embedded);
+  const [open, setOpen] = useState(true);
   const [inputValue, setInputValue] = useState('');
   const [lastReadCount, setLastReadCount] = useState(messages.length);
   const inputRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const { t } = useTranslation();
 
-  useEffect(() => setOpen(!compact || embedded), [compact, embedded]);
+  useEffect(() => setOpen((prev) => prev || !compact || embedded), [compact, embedded]);
   useEffect(() => {
     if (open) {
       setLastReadCount(messages.length);
