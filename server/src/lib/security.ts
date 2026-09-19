@@ -20,6 +20,9 @@ export const ROOM_SETTING_KEYS = [
   'revealKing',
   'warringStatesMode',
   'deathSpectator',
+  'commanderDifficultyMode',
+  'commanderClistTier',
+  'commanderCodeforcesRating',
 ] as const;
 
 export type RoomSettingKey = (typeof ROOM_SETTING_KEYS)[number];
@@ -121,6 +124,18 @@ export function validateRoomSetting(room: Room, property: string, value: unknown
       return typeof value === 'boolean'
         ? { ok: true, value }
         : { ok: false, code: 'INVALID_VALUE', message: 'Expected a boolean value.' };
+    case 'commanderDifficultyMode':
+      return value === 'CLIST_BAND' || value === 'CF_RATING'
+        ? { ok: true, value }
+        : { ok: false, code: 'INVALID_VALUE', message: 'Commander difficulty mode is invalid.' };
+    case 'commanderClistTier':
+      return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 4
+        ? { ok: true, value }
+        : { ok: false, code: 'INVALID_VALUE', message: 'CList difficulty tier is invalid.' };
+    case 'commanderCodeforcesRating':
+      return typeof value === 'number' && Number.isInteger(value) && value >= 800 && value <= 3500 && value % 100 === 0
+        ? { ok: true, value }
+        : { ok: false, code: 'INVALID_VALUE', message: 'Codeforces rating must be between 800 and 3500.' };
   }
 }
 
@@ -168,6 +183,13 @@ export function applyRoomSetting(room: Room, property: RoomSettingKey, value: Ro
     case 'warringStatesMode':
     case 'deathSpectator':
       room[property] = value as boolean;
+      break;
+    case 'commanderDifficultyMode':
+      room[property] = value as 'CLIST_BAND' | 'CF_RATING';
+      break;
+    case 'commanderClistTier':
+    case 'commanderCodeforcesRating':
+      room[property] = value as number;
       break;
   }
 }

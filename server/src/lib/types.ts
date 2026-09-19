@@ -124,6 +124,10 @@ export class Message {
 export class Room {
   /** Server-only room challenge queue; excluded from serialized room updates. */
   public codeforcesQueue: SharedCodeforcesQueue | null = null;
+  /** Host-selected commander problem difficulty; validated before any match begins. */
+  public commanderDifficultyMode: 'CLIST_BAND' | 'CF_RATING' = 'CLIST_BAND';
+  public commanderClistTier: number = 0;
+  public commanderCodeforcesRating: number = 800;
 
   constructor(
     public id: string,
@@ -131,12 +135,12 @@ export class Room {
     public gameStarted: boolean = false,
     public forceStartNum: number = 0,
     public mapGenerated: boolean = false,
-    public maxPlayers: number = 8,
+    public maxPlayers: number = 4,
     public gameSpeed: number = 1, // valid value: [0.25, 0.5, 0.75, 1, 2, 3, 4];
     public mapWidth: number = 0.5, // todo 改为实际 map高度，而不是 0-1 的值
     public mapHeight: number = 0.5,
     public mountain: number = 0.5,
-    public city: number = 0.5,
+    public city: number = 0,
     public swamp: number = 0,
     public fogOfWar: boolean = true,
     public deathSpectator: boolean = true, // allow dead player to watch game
@@ -152,7 +156,7 @@ export class Room {
   ) {}
 
   static create(options: Partial<Room>): Room {
-    return new Room(
+    const room = new Room(
       options.id!,
       options.roomName,
       options.gameStarted,
@@ -177,6 +181,10 @@ export class Room {
       options.revealKing,
       options.warringStatesMode
     );
+    room.commanderDifficultyMode = options.commanderDifficultyMode || room.commanderDifficultyMode;
+    room.commanderClistTier = options.commanderClistTier ?? room.commanderClistTier;
+    room.commanderCodeforcesRating = options.commanderCodeforcesRating ?? room.commanderCodeforcesRating;
+    return room;
   }
 
   toJSON() {

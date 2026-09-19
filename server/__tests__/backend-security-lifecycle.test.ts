@@ -310,6 +310,9 @@ describe('room creation, settings, and supported capacity', () => {
       'revealKing',
       'warringStatesMode',
       'deathSpectator',
+      'commanderDifficultyMode',
+      'commanderClistTier',
+      'commanderCodeforcesRating',
     ]);
     for (const forbidden of ['players', 'map', 'gameLoop', 'gameStarted', 'globalMapDiff', 'gameRecord']) {
       expect(validateRoomSetting(room, forbidden, true)).toMatchObject({ ok: false, code: 'SETTING_NOT_ALLOWED' });

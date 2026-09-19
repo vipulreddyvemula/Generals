@@ -21,7 +21,6 @@ import GavelOutlinedIcon from '@mui/icons-material/GavelOutlined';
 import PsychologyAltOutlinedIcon from '@mui/icons-material/PsychologyAltOutlined';
 import CodeOutlinedIcon from '@mui/icons-material/CodeOutlined';
 import { useGame, useGameDispatch } from '@/context/GameContext';
-import { readPlayerProfile } from '@/lib/player-profile';
 import {
   AbilityType,
   ChallengeState,
@@ -121,7 +120,6 @@ export default function CommanderPanel() {
   const [codeforcesChallenge, setCodeforcesChallenge] =
     useState<CodeforcesChallengeState | null>(null);
   const [mathAnswer, setMathAnswer] = useState('');
-  const [codeforcesHandle, setCodeforcesHandle] = useState('');
   const [cfStatus, setCfStatus] = useState<CfStatus>('AVAILABLE');
   const [cfQueueStatus, setCfQueueStatus] =
     useState<CodeforcesQueueStatus | null>(null);
@@ -135,7 +133,9 @@ export default function CommanderPanel() {
   const [activeTab, setActiveTab] = useState<'CHALLENGES' | 'ABILITIES'>(
     'CHALLENGES'
   );
-  const [connected, setConnected] = useState(Boolean(socketRef.current?.connected));
+  const [connected, setConnected] = useState(
+    Boolean(socketRef.current?.connected)
+  );
 
   useEffect(() => {
     const socket = socketRef.current;
@@ -151,10 +151,6 @@ export default function CommanderPanel() {
     };
   }, [socketRef]);
 
-  useEffect(() => {
-    setCodeforcesHandle((current) => current || readPlayerProfile().handle);
-  }, []);
-
   const mathCooldown = Boolean(
     currentPlayer &&
       room?.map &&
@@ -165,10 +161,6 @@ export default function CommanderPanel() {
     if (!currentPlayer) return;
     setEnergy(currentPlayer.energy || 0);
     setMathChallenge(currentPlayer.activeChallenge || null);
-    if (currentPlayer.codeforcesHandle)
-      setCodeforcesHandle(
-        (current) => current || currentPlayer.codeforcesHandle
-      );
     const activeCf = currentPlayer.activeCodeforcesChallenge || null;
     // A room update can arrive while the accepted banner is visible. Keep the
     // completed card on screen until its queued successor is revealed.
@@ -206,7 +198,12 @@ export default function CommanderPanel() {
         setBanner({
           source: 'MATH',
           tone: 'error',
-          title: result.status === 'EXPIRED' ? 'EXPIRED' : result.status === 'ERROR' ? 'TRY AGAIN' : 'NOT SOLVED',
+          title:
+            result.status === 'EXPIRED'
+              ? 'EXPIRED'
+              : result.status === 'ERROR'
+                ? 'TRY AGAIN'
+                : 'NOT SOLVED',
           message: result.message,
         });
       }
@@ -422,9 +419,7 @@ export default function CommanderPanel() {
   const requestCodeforces = () => {
     setCfStatus('ASSIGNING');
     setCfQueueExhausted(false);
-    socketRef.current?.emit('request_codeforces_challenge', {
-      handle: codeforcesHandle.trim(),
-    });
+    socketRef.current?.emit('request_codeforces_challenge');
   };
   const verifyCodeforces = () => {
     if (
@@ -524,7 +519,13 @@ export default function CommanderPanel() {
         />
       </Box>
 
-      <Box sx={{ ...cardSx, background: 'rgba(4, 16, 25, .6)', borderColor: 'rgba(104,148,171,.34)' }}>
+      <Box
+        sx={{
+          ...cardSx,
+          background: 'rgba(4, 16, 25, .6)',
+          borderColor: 'rgba(104,148,171,.34)',
+        }}
+      >
         <Box
           sx={{
             display: 'flex',
@@ -595,7 +596,7 @@ export default function CommanderPanel() {
             p: 0,
             border: '1px solid rgba(104,148,171,.34)',
             borderRadius: '5px',
-            marginX: .4,
+            marginX: 0.4,
           },
           '& .Mui-selected': {
             color: '#fff !important',
@@ -606,8 +607,18 @@ export default function CommanderPanel() {
           },
         }}
       >
-        <Tab icon={<ExtensionOutlinedIcon sx={{ fontSize: 17 }} />} iconPosition='start' label='CHALLENGES' value='CHALLENGES' />
-        <Tab icon={<GavelOutlinedIcon sx={{ fontSize: 17 }} />} iconPosition='start' label='ABILITIES' value='ABILITIES' />
+        <Tab
+          icon={<ExtensionOutlinedIcon sx={{ fontSize: 17 }} />}
+          iconPosition='start'
+          label='CHALLENGES'
+          value='CHALLENGES'
+        />
+        <Tab
+          icon={<GavelOutlinedIcon sx={{ fontSize: 17 }} />}
+          iconPosition='start'
+          label='ABILITIES'
+          value='ABILITIES'
+        />
       </Tabs>
 
       {activeTab === 'CHALLENGES' && (
@@ -621,7 +632,21 @@ export default function CommanderPanel() {
                 mb: 0.8,
               }}
             >
-              <Typography sx={{ display: 'flex', alignItems: 'center', gap: .7, fontSize: 12, fontWeight: 900, letterSpacing: .8 }}><PsychologyAltOutlinedIcon sx={{ fontSize: 19, color: '#8baeff' }} />MATH CHALLENGE</Typography>
+              <Typography
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.7,
+                  fontSize: 12,
+                  fontWeight: 900,
+                  letterSpacing: 0.8,
+                }}
+              >
+                <PsychologyAltOutlinedIcon
+                  sx={{ fontSize: 19, color: '#8baeff' }}
+                />
+                MATH CHALLENGE
+              </Typography>
             </Box>
             {mathChallenge ? (
               <>
@@ -676,7 +701,24 @@ export default function CommanderPanel() {
                 </Box>
               </>
             ) : (
-              <Box sx={{ display: 'grid', gap: 1.2, mt: 1.3 }}><Typography sx={{ fontSize: 12, color: '#a4b4c2' }}>Request a tactical question to solve in-game.</Typography><Button onClick={requestMath} disabled={mathCooldown} sx={{ color: '#fff', bgcolor: '#2868d8', '&:hover': { bgcolor: '#347cf3' }, fontSize: 12, fontWeight: 800 }}>{mathCooldown ? 'Recharging' : 'Get Math Challenge'}</Button></Box>
+              <Box sx={{ display: 'grid', gap: 1.2, mt: 1.3 }}>
+                <Typography sx={{ fontSize: 12, color: '#a4b4c2' }}>
+                  Request a tactical question to solve in-game.
+                </Typography>
+                <Button
+                  onClick={requestMath}
+                  disabled={mathCooldown}
+                  sx={{
+                    color: '#fff',
+                    bgcolor: '#2868d8',
+                    '&:hover': { bgcolor: '#347cf3' },
+                    fontSize: 12,
+                    fontWeight: 800,
+                  }}
+                >
+                  {mathCooldown ? 'Recharging' : 'Get Math Challenge'}
+                </Button>
+              </Box>
             )}
           </Box>
 
@@ -698,24 +740,43 @@ export default function CommanderPanel() {
                 mb: 0.8,
               }}
             >
-              <Typography sx={{ display: 'flex', alignItems: 'center', gap: .7, fontSize: 12, fontWeight: 900, letterSpacing: .8 }}><CodeOutlinedIcon sx={{ fontSize: 19, color: '#80aaff' }} />CODEFORCES CHALLENGE</Typography>
+              <Typography
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.7,
+                  fontSize: 12,
+                  fontWeight: 900,
+                  letterSpacing: 0.8,
+                }}
+              >
+                <CodeOutlinedIcon sx={{ fontSize: 19, color: '#80aaff' }} />
+                CODEFORCES CHALLENGE
+              </Typography>
               <Chip
                 label={cfStatus}
                 size='small'
                 sx={{
                   maxWidth: 150,
                   height: 18,
-                    fontSize: 8,
-                    fontWeight: 900,
-                    color: cfStatus === 'ACCEPTED' ? '#45d992' : '#89b4ff',
-                    bgcolor: 'rgba(40,104,216,.14)',
+                  fontSize: 8,
+                  fontWeight: 900,
+                  color: cfStatus === 'ACCEPTED' ? '#45d992' : '#89b4ff',
+                  bgcolor: 'rgba(40,104,216,.14)',
                   borderRadius: 1,
                 }}
               />
             </Box>
             {codeforcesChallenge ? (
               <>
-                <Box sx={{ display: 'flex', gap: 0.8, alignItems: 'baseline', mt: 1.5 }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    gap: 0.8,
+                    alignItems: 'baseline',
+                    mt: 1.5,
+                  }}
+                >
                   <Typography
                     sx={{ fontSize: 17, fontWeight: 900, color: '#fff' }}
                   >
@@ -733,7 +794,18 @@ export default function CommanderPanel() {
                 >
                   {codeforcesChallenge.problemName}
                 </Typography>
-                <Typography sx={{ fontSize: 12, color: '#a4b4c2', mt: 1.5, lineHeight: 1.5 }}>Solve on Codeforces using your handle.<br />Get Accepted, then verify.</Typography>
+                <Typography
+                  sx={{
+                    fontSize: 12,
+                    color: '#a4b4c2',
+                    mt: 1.5,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Solve on Codeforces using your handle.
+                  <br />
+                  Get Accepted, then verify.
+                </Typography>
                 <Box
                   sx={{
                     display: 'grid',
@@ -792,7 +864,10 @@ export default function CommanderPanel() {
               </>
             ) : (
               <>
-                <Typography sx={{ fontSize: 12, color: '#a4b4c2', mb: 1 }}>Sync your Codeforces handle to receive the shared challenge.</Typography>
+                <Typography sx={{ fontSize: 12, color: '#a4b4c2', mb: 1 }}>
+                  Your Codeforces handle was checked before the match. Request
+                  your assigned challenge when ready.
+                </Typography>
                 {cfQueueStatus && !cfQueueStatus.initialized && (
                   <Typography
                     sx={{
@@ -819,64 +894,28 @@ export default function CommanderPanel() {
                     No more eligible shared problems remain in this band.
                   </Typography>
                 ) : (
-                  <Box sx={{ display: 'flex', gap: 0.7 }}>
-                    <TextField
-                      value={codeforcesHandle}
-                      onChange={(event) =>
-                        setCodeforcesHandle(event.target.value)
-                      }
-                      placeholder='Codeforces handle'
-                      size='small'
-                      fullWidth
-                      disabled={
-                        cfPlayerReady || Boolean(cfQueueStatus?.initialized)
-                      }
-                      inputProps={{
-                        'aria-label': 'Codeforces handle',
-                        maxLength: 24,
-                      }}
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          height: 34,
-                          color: '#fff',
-                          fontSize: 11,
-                          bgcolor: 'rgba(0,0,0,.18)',
-                          '& fieldset': {
-                            borderColor: 'rgba(47,230,166,.22)',
-                          },
-                        },
-                      }}
-                    />
-                    <Button
-                      onClick={requestCodeforces}
-                      disabled={
-                        cfStatus === 'ASSIGNING' ||
-                        cfPlayerReady ||
-                        Boolean(cfQueueStatus?.initialized) ||
-                        codeforcesHandle.trim().length < 3
-                      }
-                      sx={{
-                        minWidth: 98,
-                        color: '#fff',
-                        bgcolor: '#2868d8',
-                        '&:hover': { bgcolor: '#347cf3' },
-                        '&.Mui-disabled': {
-                          bgcolor: 'rgba(40,104,216,.4)',
-                          color: 'rgba(255,255,255,.5)',
-                        },
-                        fontSize: 9,
-                        fontWeight: 900,
-                      }}
-                    >
-                      {cfStatus === 'ASSIGNING' ? (
-                        <CircularProgress size={14} color='inherit' />
-                      ) : cfPlayerReady ? (
-                        'Synced'
-                      ) : (
-                        'Sync Handle'
-                      )}
-                    </Button>
-                  </Box>
+                  <Button
+                    onClick={requestCodeforces}
+                    disabled={cfStatus === 'ASSIGNING'}
+                    sx={{
+                      width: '100%',
+                      color: '#fff',
+                      bgcolor: '#2868d8',
+                      '&:hover': { bgcolor: '#347cf3' },
+                      '&.Mui-disabled': {
+                        bgcolor: 'rgba(40,104,216,.4)',
+                        color: 'rgba(255,255,255,.5)',
+                      },
+                      fontSize: 9,
+                      fontWeight: 900,
+                    }}
+                  >
+                    {cfStatus === 'ASSIGNING' ? (
+                      <CircularProgress size={14} color='inherit' />
+                    ) : (
+                      'Get Codeforces Challenge'
+                    )}
+                  </Button>
                 )}
               </>
             )}
@@ -943,7 +982,9 @@ export default function CommanderPanel() {
             return (
               <Button
                 key={ability.type}
-                onClick={affordable ? () => activateAbility(ability.type) : undefined}
+                onClick={
+                  affordable ? () => activateAbility(ability.type) : undefined
+                }
                 aria-pressed={selected}
                 aria-disabled={!affordable}
                 sx={{
@@ -959,9 +1000,13 @@ export default function CommanderPanel() {
                   borderRadius: '6px',
                   bgcolor: selected
                     ? `${ability.accent}18`
-                    : affordable ? 'rgba(8,16,28,.72)' : 'rgba(8,16,28,.5)',
+                    : affordable
+                      ? 'rgba(8,16,28,.72)'
+                      : 'rgba(8,16,28,.5)',
                   '& svg': { fontSize: 24 },
-                  '&:hover': affordable ? undefined : { bgcolor: 'rgba(8,16,28,.5)' },
+                  '&:hover': affordable
+                    ? undefined
+                    : { bgcolor: 'rgba(8,16,28,.5)' },
                 }}
               >
                 {ability.icon}

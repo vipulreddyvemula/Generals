@@ -21,6 +21,20 @@ export interface CodeforcesProblem {
   tags?: string[];
 }
 
+export type CommanderDifficultySelection = {
+  mode: 'CLIST_BAND' | 'CF_RATING';
+  clistTier: number;
+  codeforcesRating: number;
+};
+
+const CLIST_TIER_RANGES: Array<[number, number, number | null]> = [
+  [0, 0, 300],
+  [1, 301, 600],
+  [2, 601, 1000],
+  [3, 1001, 1500],
+  [4, 1501, null],
+];
+
 interface CompactCatalogueProblem {
   c: number;
   i: string;
@@ -135,15 +149,24 @@ export function isValidCodeforcesHandle(handle: string): boolean {
 
 export function selectCodeforcesProblem(
   solvedSet: ReadonlySet<string>,
-  recentlyAssigned: ReadonlySet<string> = new Set()
+  recentlyAssigned: ReadonlySet<string> = new Set(),
+  selection?: CommanderDifficultySelection
 ): CodeforcesProblem {
-  const eligible = CODEFORCES_PROBLEMS.filter(
-    (problem) => problem.clistBand === COMMANDER_CONFIG.codeforces.clistBand && !solvedSet.has(problemKey(problem))
-  );
+  const [, lowerBound, upperBound] = CLIST_TIER_RANGES[selection?.clistTier ?? 0] || CLIST_TIER_RANGES[0];
+  const eligible = CODEFORCES_PROBLEMS.filter((problem) => {
+    const matchesDifficulty = !selection
+      ? problem.clistBand === COMMANDER_CONFIG.codeforces.clistBand
+      : selection.mode === 'CF_RATING'
+      ? problem.rating === selection.codeforcesRating
+      : typeof problem.clistRating === 'number' &&
+        problem.clistRating >= lowerBound &&
+        (upperBound === null || problem.clistRating <= upperBound);
+    return matchesDifficulty && !solvedSet.has(problemKey(problem));
+  });
   const fresh = eligible.filter((problem) => !recentlyAssigned.has(problemKey(problem)));
   const pool = fresh.length > 0 ? fresh : eligible;
   if (pool.length === 0) {
-    throw new CodeforcesCatalogueError('No unsolved Codeforces problem is available in the configured CLIST band');
+    throw new CodeforcesCatalogueError('No unsolved Codeforces problem is available for this room difficulty.');
   }
   return pool[Math.floor(Math.random() * pool.length)];
 }

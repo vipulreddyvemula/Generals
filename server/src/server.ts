@@ -35,7 +35,7 @@ import MapDiff from './lib/map-diff';
 import GameRecord from './lib/game-record';
 import { MathGenerator } from './lib/commander/math-generator';
 import { addCommanderEnergy, COMMANDER_CONFIG } from './lib/commander/config';
-import { CodeforcesCatalogueError, isValidCodeforcesHandle } from './lib/commander/codeforces-catalogue';
+import { CodeforcesCatalogueError, isValidCodeforcesHandle, selectCodeforcesProblem } from './lib/commander/codeforces-catalogue';
 import { codeforcesApiQueue, CodeforcesApiError } from './lib/commander/cf-api-queue';
 import SharedCodeforcesQueue from './lib/commander/shared-codeforces-queue';
 import {
@@ -71,8 +71,10 @@ const cors_urls = process.env.CLIENT_URL == '*' ? '*' : process.env.CLIENT_URL.s
 console.log(cors_urls);
 
 if (process.env.NODE_ENV === 'production' && cors_urls === '*') {
-  console.warn('[SECURITY] CLIENT_URL is set to wildcard (*) in production. ' +
-    'Set CLIENT_URL to your explicit frontend origin(s) to enforce CORS.');
+  console.warn(
+    '[SECURITY] CLIENT_URL is set to wildcard (*) in production. ' +
+      'Set CLIENT_URL to your explicit frontend origin(s) to enforce CORS.'
+  );
 }
 
 app.use(express.json());
@@ -233,7 +235,13 @@ function tryInitializeCodeforcesQueue(room: Room, io: Server): void {
 
   room.codeforcesQueue = new SharedCodeforcesQueue(
     eligiblePlayers.map((candidate) => candidate.id),
-    eligiblePlayers.map((candidate) => candidate.codeforcesSolvedSet)
+    eligiblePlayers.map((candidate) => candidate.codeforcesSolvedSet),
+    (excludedProblems) =>
+      selectCodeforcesProblem(excludedProblems, new Set(), {
+        mode: room.commanderDifficultyMode,
+        clistTier: room.commanderClistTier,
+        codeforcesRating: room.commanderCodeforcesRating,
+      })
   );
 
   for (const eligiblePlayer of eligiblePlayers) {
@@ -241,6 +249,57 @@ function tryInitializeCodeforcesQueue(room: Room, io: Server): void {
   }
   emitCodeforcesQueueStatus(room, io);
   io.in(room.id).emit('update_room', room);
+}
+
+async function prepareCodeforcesHistory(room: Room, player: Player, io: Server): Promise<void> {
+  const handle = player.codeforcesHandle.trim();
+  if (!isValidCodeforcesHandle(handle) || player.codeforcesHistoryLoading || player.codeforcesSolvedSetReady) return;
+  if (
+    room.players.some(
+      (candidate) => candidate.id !== player.id && candidate.codeforcesHandle.toLowerCase() === handle.toLowerCase()
+    )
+  ) {
+    player.codeforcesHandle = '';
+    io.sockets.sockets.get(player.socket_id)?.emit('challenge_error', {
+      source: 'CODEFORCES',
+      message: 'This Codeforces handle is already registered by another player in this room.',
+    });
+    return;
+  }
+
+  const roomId = room.id;
+  const playerId = player.id;
+  player.codeforcesHistoryLoading = true;
+  emitCodeforcesQueueStatus(room, io);
+  try {
+    const solvedSet = await codeforcesApiQueue.fetchSolvedSet(handle);
+    const liveRoom = roomPool[roomId];
+    const livePlayer = liveRoom?.players.find((candidate) => candidate.id === playerId);
+    if (!liveRoom || !livePlayer || livePlayer.codeforcesHandle !== handle) return;
+    livePlayer.codeforcesHistoryLoading = false;
+    livePlayer.codeforcesSolvedSet = solvedSet;
+    livePlayer.codeforcesSolvedSetReady = true;
+    if (liveRoom.gameStarted) tryInitializeCodeforcesQueue(liveRoom, io);
+    io.in(liveRoom.id).emit('update_room', liveRoom);
+  } catch (error) {
+    const liveRoom = roomPool[roomId];
+    const livePlayer = liveRoom?.players.find((candidate) => candidate.id === playerId);
+    if (livePlayer?.codeforcesHandle === handle) {
+      livePlayer.codeforcesHandle = '';
+      livePlayer.codeforcesSolvedSet = new Set<string>();
+      livePlayer.codeforcesSolvedSetReady = false;
+      livePlayer.codeforcesHistoryLoading = false;
+    }
+    const message =
+      error instanceof CodeforcesApiError && error.code === 'INVALID_HANDLE'
+        ? 'Codeforces handle not found. Check the spelling and try again.'
+        : 'Codeforces is temporarily unavailable. Challenges will remain unavailable for this player.';
+    io.sockets.sockets.get(livePlayer?.socket_id || player.socket_id)?.emit('challenge_error', { source: 'CODEFORCES', message });
+    if (liveRoom) {
+      emitCodeforcesQueueStatus(liveRoom, io);
+      io.in(liveRoom.id).emit('update_room', liveRoom);
+    }
+  }
 }
 
 function issuePlayerSession(player: Player, socket: Socket): void {
@@ -265,7 +324,8 @@ function finishGame(room: Room, io: Server, gameRecord: GameRecord): boolean {
   io.in(room.id).emit('game_ended', winners, '');
 
   // P9: Async replay write — does not block the game loop or the event loop.
-  void gameRecord.outPutToJSON(process.cwd())
+  void gameRecord
+    .outPutToJSON(process.cwd())
     .then((replayLink) => {
       io.in(room.id).emit('replay_ready', replayLink);
     })
@@ -309,26 +369,30 @@ function handleDisconnectInRoom(room: Room, player: Player, socketId: string, io
       player.forceStart = false;
       room.forceStartNum = room.players.filter((candidate) => candidate.forceStart).length;
     }
-    scheduleReconnectGrace(player, () => {
-      const liveRoom = roomPool[room.id];
-      const livePlayer = liveRoom?.players.find((candidate) => candidate.id === player.id);
-      if (liveRoom !== room || livePlayer !== player || !livePlayer.disconnected) return;
+    scheduleReconnectGrace(
+      player,
+      () => {
+        const liveRoom = roomPool[room.id];
+        const livePlayer = liveRoom?.players.find((candidate) => candidate.id === player.id);
+        if (liveRoom !== room || livePlayer !== player || !livePlayer.disconnected) return;
 
-      livePlayer.sessionTokenHash = '';
-      if (liveRoom.gameStarted && !livePlayer.spectating()) {
-        neutralizePlayer(liveRoom, livePlayer);
-        io.in(liveRoom.id).emit('room_message', livePlayer.minify(), 'failed to reconnect and was eliminated.');
-        if (!liveRoom.codeforcesQueue) tryInitializeCodeforcesQueue(liveRoom, io);
-        const outcome = getGameOutcome(liveRoom);
-        if (outcome.terminal && liveRoom.gameRecord) {
-          finishGame(liveRoom, io, liveRoom.gameRecord);
+        livePlayer.sessionTokenHash = '';
+        if (liveRoom.gameStarted && !livePlayer.spectating()) {
+          neutralizePlayer(liveRoom, livePlayer);
+          io.in(liveRoom.id).emit('room_message', livePlayer.minify(), 'failed to reconnect and was eliminated.');
+          if (!liveRoom.codeforcesQueue) tryInitializeCodeforcesQueue(liveRoom, io);
+          const outcome = getGameOutcome(liveRoom);
+          if (outcome.terminal && liveRoom.gameRecord) {
+            finishGame(liveRoom, io, liveRoom.gameRecord);
+          } else {
+            io.in(liveRoom.id).emit('update_room', liveRoom);
+          }
         } else {
-          io.in(liveRoom.id).emit('update_room', liveRoom);
+          removeRoomParticipant(liveRoom, livePlayer, io);
         }
-      } else {
-        removeRoomParticipant(liveRoom, livePlayer, io);
-      }
-    }, ReconnectGraceMs);
+      },
+      ReconnectGraceMs
+    );
     io.in(room.id).emit('room_message', player.minify(), `disconnected; ${ReconnectGraceMs / 1000}s to reconnect.`);
     if (room.gameStarted && !room.codeforcesQueue) tryInitializeCodeforcesQueue(room, io);
     io.in(room.id).emit('update_room', room);
@@ -346,7 +410,11 @@ async function checkForcedStart(room: Room, io: Server) {
     // P6: Require at least two distinct teams among active players.
     const activeTeams = new Set(activePlayers.map((player) => player.team));
     if (activeTeams.size < 2) {
-      io.in(room.id).emit('error', 'Match cannot start', 'All active players are on the same team. Assign players to at least two teams.');
+      io.in(room.id).emit(
+        'error',
+        'Match cannot start',
+        'All active players are on the same team. Assign players to at least two teams.'
+      );
       return;
     }
     try {
@@ -538,6 +606,7 @@ io.on('connection', async (socket) => {
 
   const params = socket.handshake.query;
   let username = String(get_query_param(params, 'username') || '');
+  const codeforcesHandle = String(get_query_param(params, 'codeforcesHandle') || '').trim();
   const roomId = String(get_query_param(params, 'roomId') || '');
   const claimedPlayerId = typeof socket.handshake.auth?.playerId === 'string' ? socket.handshake.auth.playerId : '';
   const reconnectToken = typeof socket.handshake.auth?.reconnectToken === 'string' ? socket.handshake.auth.reconnectToken : '';
@@ -643,6 +712,7 @@ io.on('connection', async (socket) => {
     }
 
     player = new Player(playerId, socket.id, username, playerColor, playerTeam);
+    if (isValidCodeforcesHandle(codeforcesHandle)) player.codeforcesHandle = codeforcesHandle;
     console.log(`Connect! Socket ${socket.id}, room ${roomId} name ${username} playerId ${playerId} color ${playerColor}`);
 
     if (room.players.length === 0) {
@@ -672,6 +742,10 @@ io.on('connection', async (socket) => {
     }
 
     room.players.push(player);
+
+    // Fetch solved history during room entry, before the match begins. The
+    // in-game commander panel never needs to ask the player to sync again.
+    if (player.codeforcesHandle) void prepareCodeforcesHistory(room, player, io);
 
     // broadcast new player message to room
     io.in(room.id).emit('room_message', player.minify(), message);
@@ -714,7 +788,9 @@ io.on('connection', async (socket) => {
     }
     removeRoomParticipant(room, actingPlayer, io);
     ack?.({ ok: true });
-    socket.disconnect(true);
+    // Let Socket.IO flush the acknowledgement before closing the transport.
+    // An immediate disconnect can race the ack and leave stale client state.
+    setImmediate(() => socket.disconnect(true));
   });
 
   socket.on('set_team', (team: unknown) => {
@@ -1024,6 +1100,7 @@ io.on('connection', async (socket) => {
     const currPlayer = room.players.find((p) => p.socket_id === socket.id);
     if (!currPlayer || currPlayer.isDead || currPlayer.disconnected || currPlayer.spectating()) return;
 
+    if (!room.codeforcesQueue) tryInitializeCodeforcesQueue(room, io);
     if (room.codeforcesQueue) {
       if (!room.codeforcesQueue.hasPlayer(currPlayer.id)) {
         socket.emit('challenge_error', { source: 'CODEFORCES', message: 'You are not part of this match queue.' });
@@ -1214,8 +1291,8 @@ io.on('connection', async (socket) => {
             result.reason === 'old_submission'
               ? 'That solution predates this assignment. Submit a new accepted solution.'
               : result.reason === 'rejected'
-                ? 'Not accepted yet. Keep solving this problem on Codeforces.'
-                : 'No submission found yet. Submit on Codeforces, then verify again.';
+              ? 'Not accepted yet. Keep solving this problem on Codeforces.'
+              : 'No submission found yet. Submit on Codeforces, then verify again.';
           liveSocket?.emit('codeforces_verification_result', {
             status: 'NOT_ACCEPTED',
             reason: result.reason,

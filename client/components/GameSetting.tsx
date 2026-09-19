@@ -28,6 +28,14 @@ function SettingRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+const clistTiers = [
+  'Super Easy · CList 0–300',
+  'Easy · CList 301–600',
+  'Medium · CList 601–1000',
+  'Hard · CList 1001–1500',
+  'Very Hard · CList 1501+',
+];
+
 export default function GameSetting({ chat }: { chat?: ReactNode }) {
   const router = useRouter();
   const { room, socketRef, myPlayerId, team } = useGame();
@@ -44,6 +52,10 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
     (player) => player.team !== MaxTeamNum + 1
   );
   const readyNeeded = forceStartOK[activePlayers.length] || 2;
+  const commanderDifficulty =
+    room.commanderDifficultyMode === 'CF_RATING'
+      ? `CF ${room.commanderCodeforcesRating}`
+      : clistTiers[room.commanderClistTier] || clistTiers[0];
 
   useEffect(() => {
     setNameDraft(room.roomName);
@@ -86,22 +98,27 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
     if (leaving) return;
     setLeaving(true);
     const socket = socketRef.current;
-    const finish = (confirmed: boolean) => {
-      if (confirmed) localStorage.removeItem(`generals.player-session.${room.id}`);
+    const finish = () => {
+      localStorage.removeItem(`generals.player-session.${room.id}`);
       socket?.disconnect();
-      void router.push('/play');
+      void router.push('/');
     };
     if (!socket?.connected) {
-      finish(false);
+      finish();
       return;
     }
-    socket.timeout(1500).emit('leave_room', (error: Error | null, result?: { ok: boolean }) => {
-      if (!error && result?.ok === false) {
-        setLeaving(false);
-        return;
-      }
-      finish(!error && result?.ok === true);
-    });
+    socket
+      .timeout(1500)
+      .emit('leave_room', (error: Error | null, result?: { ok: boolean }) => {
+        if (!error && result?.ok === false) {
+          setLeaving(false);
+          return;
+        }
+        // A timeout is ambiguous because the server may have removed the player
+        // before its acknowledgement reached the browser. This was an explicit
+        // leave action, so discard the local room credential in either case.
+        finish();
+      });
   };
 
   const copyCode = async () => {
@@ -120,7 +137,7 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
         <div className='g-wait-banner'>
           <button className='g-wait-back' onClick={leave}>
             <ArrowBackIcon fontSize='small' />
-            Back to Rooms
+            Back to Home
           </button>
           <h1>
             Room: {room.roomName}{' '}
@@ -211,17 +228,30 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
                   color: '#f0f5f8',
                   background: 'rgba(3, 13, 21, .55)',
                   borderRadius: '5px',
-                  '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(104,148,171,.34)' },
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'rgba(104,148,171,.34)',
+                  },
                   '& .MuiSvgIcon-root': { color: '#d9b765' },
                 }}
-                MenuProps={{ PaperProps: { sx: { maxHeight: 290, background: '#0b1a27', color: '#f0f5f8', border: '1px solid rgba(104,148,171,.34)' } } }}
+                MenuProps={{
+                  PaperProps: {
+                    sx: {
+                      maxHeight: 290,
+                      background: '#0b1a27',
+                      color: '#f0f5f8',
+                      border: '1px solid rgba(104,148,171,.34)',
+                    },
+                  },
+                }}
               >
                 <MenuItem value='' disabled>
                   Choose team
                 </MenuItem>
                 {Array.from({ length: MaxTeamNum }, (_, index) => {
                   const teamNumber = index + 1;
-                  const isOccupied = room.players.some((p) => p.team === teamNumber);
+                  const isOccupied = room.players.some(
+                    (p) => p.team === teamNumber
+                  );
                   return (
                     <MenuItem key={index} value={teamNumber}>
                       Team {teamNumber} {isOccupied ? '(Occupied)' : ''}
@@ -254,6 +284,10 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
             <SettingRow
               label='Players'
               value={`${room.players.length}/${room.maxPlayers}`}
+            />
+            <SettingRow
+              label='Commander Difficulty'
+              value={commanderDifficulty}
             />
             {isHost && (
               <button
@@ -338,6 +372,74 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
                     />
                   </label>
                 ))}
+                <div className='g-editor-difficulty'>
+                  <span>Commander Difficulty</span>
+                  <div className='g-editor-mode-options'>
+                    <label className='g-editor-check'>
+                      <input
+                        type='radio'
+                        name='waiting-difficulty-mode'
+                        checked={room.commanderDifficultyMode === 'CLIST_BAND'}
+                        onChange={() =>
+                          emitSetting('commanderDifficultyMode', 'CLIST_BAND')
+                        }
+                      />
+                      CList Band Mode
+                    </label>
+                    <label className='g-editor-check'>
+                      <input
+                        type='radio'
+                        name='waiting-difficulty-mode'
+                        checked={room.commanderDifficultyMode === 'CF_RATING'}
+                        onChange={() =>
+                          emitSetting('commanderDifficultyMode', 'CF_RATING')
+                        }
+                      />
+                      CF Mode
+                    </label>
+                  </div>
+                  {room.commanderDifficultyMode === 'CLIST_BAND' ? (
+                    <label>
+                      Difficulty Tier
+                      <select
+                        className='g-select'
+                        value={room.commanderClistTier}
+                        onChange={(event) =>
+                          emitSetting(
+                            'commanderClistTier',
+                            Number(event.target.value)
+                          )
+                        }
+                      >
+                        {clistTiers.map((tier, index) => (
+                          <option key={tier} value={index}>
+                            {tier}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label>
+                      <span>
+                        CF Rating <b>{room.commanderCodeforcesRating}</b>
+                      </span>
+                      <input
+                        type='range'
+                        min='800'
+                        max='3500'
+                        step='100'
+                        value={room.commanderCodeforcesRating}
+                        onChange={(event) =>
+                          emitSetting(
+                            'commanderCodeforcesRating',
+                            Number(event.currentTarget.value)
+                          )
+                        }
+                      />
+                      <small>800 (newbie) · 3500 (legendary)</small>
+                    </label>
+                  )}
+                </div>
                 {(
                   [
                     'fogOfWar',
@@ -372,17 +474,28 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
               {me?.forceStart ? 'Not Ready' : 'Ready'}
             </button>
             <small>
-              {room.forceStartNum}/{readyNeeded} ready votes; match starts automatically
+              {room.forceStartNum}/{readyNeeded} ready votes; match starts
+              automatically
             </small>
           </div>
           <div>
             <button
               className='g-button'
               style={{
-                background: room.forceStartNum >= readyNeeded ? 'rgba(40,104,216,0.15)' : 'rgba(8, 21, 33, 0.7)',
-                borderColor: room.forceStartNum >= readyNeeded ? 'var(--g-border)' : 'transparent',
-                color: room.forceStartNum >= readyNeeded ? 'var(--g-muted)' : 'rgba(255,255,255,0.4)',
-                cursor: room.forceStartNum >= readyNeeded ? 'default' : 'not-allowed'
+                background:
+                  room.forceStartNum >= readyNeeded
+                    ? 'rgba(40,104,216,0.15)'
+                    : 'rgba(8, 21, 33, 0.7)',
+                borderColor:
+                  room.forceStartNum >= readyNeeded
+                    ? 'var(--g-border)'
+                    : 'transparent',
+                color:
+                  room.forceStartNum >= readyNeeded
+                    ? 'var(--g-muted)'
+                    : 'rgba(255,255,255,0.4)',
+                cursor:
+                  room.forceStartNum >= readyNeeded ? 'default' : 'not-allowed',
               }}
               role='status'
             >

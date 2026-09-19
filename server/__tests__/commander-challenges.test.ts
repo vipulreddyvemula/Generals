@@ -68,6 +68,23 @@ describe('Commander challenge authority', () => {
     expect(() => selectCodeforcesProblem(solved)).toThrow('No unsolved Codeforces problem');
   });
 
+  it('selects from the room-selected CList tier or exact Codeforces rating', () => {
+    const cListProblem = selectCodeforcesProblem(new Set(), new Set(), {
+      mode: 'CLIST_BAND',
+      clistTier: 2,
+      codeforcesRating: 800,
+    });
+    expect(cListProblem.clistRating).toBeGreaterThanOrEqual(601);
+    expect(cListProblem.clistRating).toBeLessThanOrEqual(1000);
+
+    const cfProblem = selectCodeforcesProblem(new Set(), new Set(), {
+      mode: 'CF_RATING',
+      clistTier: 0,
+      codeforcesRating: 800,
+    });
+    expect(cfProblem.rating).toBe(800);
+  });
+
   it('validates Codeforces handle syntax before any API work', () => {
     expect(isValidCodeforcesHandle('tourist')).toBe(true);
     expect(isValidCodeforcesHandle('user_name-17')).toBe(true);

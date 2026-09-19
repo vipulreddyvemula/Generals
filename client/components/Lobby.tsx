@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import AddIcon from '@mui/icons-material/Add';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import LinkIcon from '@mui/icons-material/Link';
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { ColorArr } from '@/lib/constants';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { Room } from '@/lib/types';
 import { useRooms } from '@/lib/use-rooms';
+import { readPlayerProfile, savePlayerProfile } from '@/lib/player-profile';
 
 export type PendingRoomSettings = Pick<
   Room,
@@ -22,11 +24,32 @@ export type PendingRoomSettings = Pick<
   | 'deathSpectator'
   | 'revealKing'
   | 'warringStatesMode'
+  | 'commanderDifficultyMode'
+  | 'commanderClistTier'
+  | 'commanderCodeforcesRating'
 >;
 
 export function pendingRoomSettingsKey(roomId: string) {
   return `generals.pending-room-settings.${roomId}`;
 }
+
+const defaultSettings: PendingRoomSettings = {
+  roomName: '',
+  maxPlayers: 4,
+  gameSpeed: 1,
+  mapWidth: 0.5,
+  mapHeight: 0.5,
+  mountain: 0.5,
+  city: 0,
+  swamp: 0,
+  fogOfWar: true,
+  deathSpectator: true,
+  revealKing: false,
+  warringStatesMode: false,
+  commanderDifficultyMode: 'CLIST_BAND',
+  commanderClistTier: 0,
+  commanderCodeforcesRating: 800,
+};
 
 function RangeRow({
   label,
@@ -56,42 +79,239 @@ function RangeRow({
   );
 }
 
-export default function Lobby({ roomBrowser }: { roomBrowser: ReturnType<typeof useRooms> }) {
+function RoomSettings({
+  settings,
+  update,
+}: {
+  settings: PendingRoomSettings;
+  update: <K extends keyof PendingRoomSettings>(
+    key: K,
+    value: PendingRoomSettings[K]
+  ) => void;
+}) {
+  return (
+    <>
+      <div className='g-settings-section'>
+        <h3>Battlefield</h3>
+        <label className='g-form-row'>
+          <span>Room Name</span>
+          <input
+            className='g-input'
+            maxLength={20}
+            value={settings.roomName}
+            onChange={(event) => update('roomName', event.target.value)}
+            placeholder='Name your battle'
+          />
+        </label>
+        <label className='g-form-row'>
+          <span>Room Size</span>
+          <select
+            className='g-select'
+            value={settings.maxPlayers}
+            onChange={(event) =>
+              update('maxPlayers', Number(event.target.value))
+            }
+          >
+            {Array.from({ length: 11 }, (_, i) => i + 2).map((count) => (
+              <option key={count} value={count}>
+                {count} Players
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className='g-form-row'>
+          <span>Game Speed</span>
+          <select
+            className='g-select'
+            value={settings.gameSpeed}
+            onChange={(event) =>
+              update('gameSpeed', Number(event.target.value))
+            }
+          >
+            {[0.5, 1, 2, 3, 4].map((speed) => (
+              <option key={speed} value={speed}>
+                {speed}× {speed === 1 ? 'Normal' : speed < 1 ? 'Slow' : 'Fast'}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className='g-range-grid'>
+          <RangeRow
+            label='Map Width'
+            value={settings.mapWidth}
+            onChange={(value) => update('mapWidth', value)}
+          />
+          <RangeRow
+            label='Map Height'
+            value={settings.mapHeight}
+            onChange={(value) => update('mapHeight', value)}
+          />
+        </div>
+        <div className='g-range-grid terrain'>
+          <RangeRow
+            label='Mountains'
+            value={settings.mountain}
+            onChange={(value) => update('mountain', value)}
+          />
+          <RangeRow
+            label='Cities'
+            value={settings.city}
+            onChange={(value) => update('city', value)}
+          />
+          <RangeRow
+            label='Swamps'
+            value={settings.swamp}
+            onChange={(value) => update('swamp', value)}
+          />
+        </div>
+      </div>
+      <div className='g-settings-section'>
+        <h3>Game Rules</h3>
+        <div className='g-checkbox-grid'>
+          {(
+            [
+              ['fogOfWar', 'Fog of War'],
+              ['deathSpectator', 'Allow Death Spectator'],
+              ['revealKing', 'Reveal King'],
+              ['warringStatesMode', 'Warring States Mode'],
+            ] as const
+          ).map(([key, label]) => (
+            <label key={key}>
+              <input
+                type='checkbox'
+                checked={settings[key]}
+                onChange={(event) => update(key, event.target.checked)}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className='g-settings-section g-commander-settings'>
+        <h3>Commander Problems</h3>
+        <p>Choose one difficulty system for this room.</p>
+        <div className='g-difficulty-mode'>
+          <label>
+            <input
+              type='radio'
+              name='difficulty-mode'
+              checked={settings.commanderDifficultyMode === 'CLIST_BAND'}
+              onChange={() => update('commanderDifficultyMode', 'CLIST_BAND')}
+            />{' '}
+            CList Band Mode
+          </label>
+          <label>
+            <input
+              type='radio'
+              name='difficulty-mode'
+              checked={settings.commanderDifficultyMode === 'CF_RATING'}
+              onChange={() => update('commanderDifficultyMode', 'CF_RATING')}
+            />{' '}
+            CF Mode
+          </label>
+        </div>
+        {settings.commanderDifficultyMode === 'CLIST_BAND' ? (
+          <label className='g-tier-select'>
+            <span>Difficulty Tier</span>
+            <select
+              className='g-select'
+              value={settings.commanderClistTier}
+              onChange={(event) =>
+                update('commanderClistTier', Number(event.target.value))
+              }
+            >
+              <option value={0}>Super Easy · CList 0–300</option>
+              <option value={1}>Easy · CList 301–600</option>
+              <option value={2}>Medium · CList 601–1000</option>
+              <option value={3}>Hard · CList 1001–1500</option>
+              <option value={4}>Very Hard · CList 1501+</option>
+            </select>
+            <small>
+              Problems span this CList-derived rating range — suited to casual
+              play.
+            </small>
+          </label>
+        ) : (
+          <label className='g-cf-rating'>
+            <span>
+              <b>CF Rating</b>
+              <b>{settings.commanderCodeforcesRating}</b>
+            </span>
+            <input
+              type='range'
+              min='800'
+              max='3500'
+              step='100'
+              value={settings.commanderCodeforcesRating}
+              onChange={(event) =>
+                update('commanderCodeforcesRating', Number(event.target.value))
+              }
+            />
+            <small>
+              800 (newbie)
+              <i />
+              3500 (legendary)
+            </small>
+          </label>
+        )}
+      </div>
+    </>
+  );
+}
+
+export type RoomFlowMode = 'create' | 'join';
+
+export function RoomFlow({
+  mode,
+  roomBrowser,
+}: {
+  mode: RoomFlowMode;
+  roomBrowser: ReturnType<typeof useRooms>;
+}) {
   const router = useRouter();
   const { rooms, loading, online, refresh } = roomBrowser;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [code, setCode] = useState('');
-  const [settings, setSettings] = useState<PendingRoomSettings>({
-    roomName: '',
-    maxPlayers: 2,
-    gameSpeed: 1,
-    mapWidth: 0.5,
-    mapHeight: 0.5,
-    mountain: 0.5,
-    city: 0.5,
-    swamp: 0,
-    fogOfWar: true,
-    deathSpectator: true,
-    revealKing: false,
-    warringStatesMode: false,
-  });
+  const [name, setName] = useState('');
+  const [handle, setHandle] = useState('');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] =
+    useState<PendingRoomSettings>(defaultSettings);
   const update = <K extends keyof PendingRoomSettings>(
     key: K,
     value: PendingRoomSettings[K]
   ) => setSettings((current) => ({ ...current, [key]: value }));
 
   useEffect(() => {
-    if (!localStorage.getItem('username')) router.replace('/player-details');
-  }, [router]);
+    const saved = readPlayerProfile();
+    setName(saved.name);
+    setHandle(saved.handle);
+  }, []);
 
-  useEffect(() => {
-    if (typeof router.query.joinError === 'string') {
-      setError(router.query.joinError);
+  const saveIdentity = (): boolean => {
+    const trimmedName = name.trim();
+    const trimmedHandle = handle.trim();
+    if (!trimmedName) {
+      setError('Enter a commander name to continue.');
+      return false;
     }
-  }, [router.query.joinError]);
+    if (!trimmedHandle) {
+      setError('Enter a Codeforces handle to continue.');
+      return false;
+    }
+    if (!/^[A-Za-z0-9_.-]{3,24}$/.test(trimmedHandle)) {
+      setError(
+        'Codeforces handles must be 3–24 letters, numbers, underscores, dots, or hyphens.'
+      );
+      return false;
+    }
+    savePlayerProfile({ name: trimmedName, handle: trimmedHandle });
+    return true;
+  };
 
   const createRoom = async () => {
+    if (!saveIdentity()) return;
     setBusy(true);
     setError('');
     try {
@@ -101,13 +321,12 @@ export default function Lobby({ roomBrowser }: { roomBrowser: ReturnType<typeof 
       const result = await response.json();
       if (!response.ok || typeof result.roomId !== 'string')
         throw new Error(result.message || 'Could not create the room.');
-      const pending = {
-        ...settings,
-        roomName: settings.roomName.trim() || 'Untitled',
-      };
       sessionStorage.setItem(
         pendingRoomSettingsKey(result.roomId),
-        JSON.stringify(pending)
+        JSON.stringify({
+          ...settings,
+          roomName: settings.roomName.trim() || 'Untitled',
+        })
       );
       await router.push(`/rooms/${result.roomId}`);
     } catch (cause) {
@@ -117,288 +336,204 @@ export default function Lobby({ roomBrowser }: { roomBrowser: ReturnType<typeof 
       setBusy(false);
     }
   };
-
   const joinRoom = async (roomId: string) => {
     if (busy) return;
+    if (!saveIdentity()) return;
     setBusy(true);
     setError('');
     try {
-      // A fresh server snapshot avoids joining a stale/full room and prevents
-      // an unknown code from implicitly creating a room on the socket server.
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_API}/get_rooms`);
-      if (!response.ok) throw new Error('Could not check that room. Try again.');
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SERVER_API}/get_rooms`
+      );
+      if (!response.ok)
+        throw new Error('Could not check that room. Try again.');
       const latestRooms = (await response.json()) as Record<string, Room>;
       const room = Object.values(latestRooms).find(
         (entry) => entry.id.toLowerCase() === roomId.trim().toLowerCase()
       );
       if (!room) throw new Error('No room was found with that code.');
       if (room.gameStarted) throw new Error('This match has already started.');
-      if (room.players.length >= room.maxPlayers) throw new Error('This room is full.');
+      if (room.players.length >= room.maxPlayers)
+        throw new Error('This room is full.');
       await router.push(`/rooms/${room.id}`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not join the room.');
+      setError(
+        cause instanceof Error ? cause.message : 'Could not join the room.'
+      );
       setBusy(false);
     }
   };
 
-  const joinCode = () => {
-    if (code.trim()) void joinRoom(code.trim());
-  };
-
-  const roomList = Object.values(rooms).sort(
-    (a, b) => Number(a.gameStarted) - Number(b.gameStarted)
-  );
-  return (
-    <main className='g-play-main'>
-      <section className='g-panel g-play-panel'>
-        <header className='g-panel-heading'>
-          <span className='g-heading-icon'>
-            <AddIcon />
-          </span>
+  if (mode === 'create')
+    return (
+      <section className='g-panel g-flow-card'>
+        <div className='g-flow-card-inner'>
+        <header className='g-flow-heading'>
           <div>
-            <h2>Create a New Room</h2>
-            <p>Configure your game settings and invite others.</p>
-          </div>
-        </header>
-        <div className='g-play-form'>
-          <label className='g-form-row'>
-            <span>Room Name</span>
-            <input
-              className='g-input'
-              maxLength={20}
-              value={settings.roomName}
-              onChange={(event) => update('roomName', event.target.value)}
-              placeholder='Enter room name (e.g. Finals, Fun Match)'
-            />
-          </label>
-          <label className='g-form-row'>
-            <span>Room Size</span>
-            <select
-              className='g-select'
-              value={settings.maxPlayers}
-              onChange={(event) =>
-                update('maxPlayers', Number(event.target.value))
-              }
-            >
-              {Array.from({ length: 11 }, (_, i) => i + 2).map((count) => (
-                <option key={count} value={count}>
-                  {count} Players
-                </option>
-              ))}
-            </select>
-          </label>
-          <div>
-            <span>Player Colours</span>
-            <div className='g-colour-legend'>
-              {ColorArr.slice(1).map((color, index) => (
-                <i
-                  key={index}
-                  style={{ background: color }}
-                  title={`Player color ${index + 1}`}
-                />
-              ))}
-            </div>
-            <small className='g-muted'>
-              Assigned by the server when players join.
-            </small>
-          </div>
-          <label className='g-form-row'>
-            <span>Game Speed</span>
-            <select
-              className='g-select'
-              value={settings.gameSpeed}
-              onChange={(event) =>
-                update('gameSpeed', Number(event.target.value))
-              }
-            >
-              {[0.5, 1, 2, 3, 4].map((speed) => (
-                <option key={speed} value={speed}>
-                  {speed}×{' '}
-                  {speed === 1 ? 'Normal' : speed < 1 ? 'Slow' : 'Fast'}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className='g-range-grid'>
-            <RangeRow
-              label='Map Width'
-              value={settings.mapWidth}
-              onChange={(value) => update('mapWidth', value)}
-            />
-            <RangeRow
-              label='Map Height'
-              value={settings.mapHeight}
-              onChange={(value) => update('mapHeight', value)}
-            />
-          </div>
-          <div className='g-range-grid terrain'>
-            <RangeRow
-              label='Mountains'
-              value={settings.mountain}
-              onChange={(value) => update('mountain', value)}
-            />
-            <RangeRow
-              label='Cities'
-              value={settings.city}
-              onChange={(value) => update('city', value)}
-            />
-            <RangeRow
-              label='Swamps'
-              value={settings.swamp}
-              onChange={(value) => update('swamp', value)}
-            />
-          </div>
-          <div>
-            <span>Modifiers</span>
-            <div className='g-checkbox-grid'>
-              {(
-                [
-                  ['fogOfWar', 'Fog of War'],
-                  ['deathSpectator', 'Allow Death Spectator'],
-                  ['revealKing', 'Reveal King'],
-                  ['warringStatesMode', 'Warring States Mode'],
-                ] as const
-              ).map(([key, label]) => (
-                <label key={key}>
-                  <input
-                    type='checkbox'
-                    checked={settings[key]}
-                    onChange={(event) => update(key, event.target.checked)}
-                  />
-                  {label}
-                </label>
-              ))}
-            </div>
+            <h2>Create a Room</h2>
+            <p>Set up your battlefield.</p>
           </div>
           <button
-            className='g-button g-button-blue'
-            disabled={busy || !online}
-            onClick={createRoom}
+            className='g-settings-trigger'
+            onClick={() => setSettingsOpen(true)}
           >
-            <AddIcon />
-            {busy ? 'Creating…' : 'Create Room'}
+            <SettingsOutlinedIcon /> Settings
           </button>
-          {error && (
-            <p className='g-error' role='alert'>
-              {error}
-            </p>
-          )}
-        </div>
-      </section>
-      <div className='g-play-right'>
-        <section className='g-panel g-play-panel'>
-          <header className='g-panel-heading'>
-            <LinkIcon style={{ color: 'var(--g-blue)' }} />
-            <div>
-              <h2>Join a Room with Code</h2>
-              <p>Enter a room code to join directly.</p>
-            </div>
-          </header>
-          <div className='g-join-controls'>
+        </header>
+        <div className='g-flow-fields'>
+          <label className='g-flow-field'>
+            <span>Commander Name</span>
             <input
               className='g-input'
+              maxLength={24}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder='Enter your name'
+            />
+          </label>
+          <label className='g-flow-field'>
+            <span>Codeforces Handle</span>
+            <input
+              className='g-input'
+              maxLength={24}
+              value={handle}
+              onChange={(event) => setHandle(event.target.value)}
+              placeholder='Enter your Codeforces handle'
+            />
+          </label>
+        </div>
+        <div className='g-flow-summary'>
+          <span>{settings.maxPlayers} players</span>
+          <i />
+          <span>{settings.gameSpeed}× speed</span>
+          <i />
+          <span>
+            {settings.commanderDifficultyMode === 'CF_RATING'
+              ? `CF ${settings.commanderCodeforcesRating}`
+              : 'CList band'}
+          </span>
+        </div>
+        <button
+          className='g-button g-flow-submit'
+          disabled={busy || !online}
+          onClick={() => void createRoom()}
+        >
+          <AddIcon />
+          {busy ? 'Creating…' : 'Create Room'}
+          <ArrowForwardIcon className='g-button-arrow' />
+        </button>
+        {!online && (
+          <p className='g-error' role='alert'>
+            Server unavailable. Reconnecting…
+          </p>
+        )}
+        {error && (
+          <p className='g-error' role='alert'>
+            {error}
+          </p>
+        )}
+        </div>
+        {settingsOpen && (
+          <div
+            className='g-modal-backdrop'
+            onClick={() => setSettingsOpen(false)}
+            role='presentation'
+          >
+            <section
+              className='g-modal g-room-settings-modal'
+              role='dialog'
+              aria-modal='true'
+              aria-label='Room settings'
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                className='g-modal-close'
+                onClick={() => setSettingsOpen(false)}
+                aria-label='Close settings'
+              >
+                ×
+              </button>
+              <h2>Room Settings</h2>
+              <p className='g-modal-intro'>
+                Configure the battlefield before the room opens.
+              </p>
+              <div className='g-settings-scroll'>
+                <RoomSettings settings={settings} update={update} />
+              </div>
+              <button
+                className='g-button g-button-blue g-settings-done'
+                onClick={() => setSettingsOpen(false)}
+              >
+                Done
+              </button>
+            </section>
+          </div>
+        )}
+      </section>
+    );
+
+  if (mode === 'join')
+    return (
+      <section className='g-panel g-flow-card g-join-flow-card'>
+        <div className='g-flow-card-inner'>
+        <header className='g-flow-heading'>
+          <div>
+            <h2>Join a Room</h2>
+            <p>Enter the room code to join an existing battle.</p>
+          </div>
+        </header>
+        <div className='g-flow-fields'>
+          <label className='g-flow-field'>
+            <span>Commander Name</span>
+            <input
+              className='g-input'
+              maxLength={24}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder='Enter your name'
+            />
+          </label>
+          <label className='g-flow-field'>
+            <span>Codeforces Handle</span>
+            <input
+              className='g-input'
+              maxLength={24}
+              value={handle}
+              onChange={(event) => setHandle(event.target.value)}
+              placeholder='Enter your Codeforces handle'
+            />
+          </label>
+          <label className='g-flow-field'>
+            <span>Room Code</span>
+            <input
+              className='g-input g-room-code-input'
               value={code}
               onChange={(event) => setCode(event.target.value)}
               placeholder='Enter room code'
+              autoComplete='off'
               onKeyDown={(event) => {
-                if (event.key === 'Enter') joinCode();
+                if (event.key === 'Enter' && code.trim()) void joinRoom(code);
               }}
             />
-            <button
-              className='g-button g-button-blue'
-              onClick={joinCode}
-              disabled={!code.trim() || busy}
-            >
-              Join
-            </button>
-          </div>
-        </section>
-        <section className='g-panel g-room-browser'>
-          <header className='g-panel-heading g-room-browser-header'>
-            <PeopleOutlineIcon style={{ color: 'var(--g-blue)' }} />
-            <div>
-              <h2>Available Rooms</h2>
-              <p>Join an open room and start playing.</p>
-            </div>
-            <button className='g-button g-button-outline' onClick={refresh}>
-              <RefreshIcon />
-              Refresh
-            </button>
-          </header>
-          <div className='g-room-table-wrap'>
-            <table className='g-room-table'>
-              <thead>
-                <tr>
-                  <th>Room Name</th>
-                  <th>Players</th>
-                  <th>Map Size</th>
-                  <th>Speed</th>
-                  <th>Terrain (M/C/S)</th>
-                  <th>Modifiers</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {roomList.map((room) => (
-                  <tr key={room.id}>
-                    <td>{room.roomName}</td>
-                    <td>
-                      {room.players.length}/{room.maxPlayers}
-                    </td>
-                    <td>
-                      {room.mapWidth.toFixed(2)} × {room.mapHeight.toFixed(2)}
-                    </td>
-                    <td>{room.gameSpeed}×</td>
-                    <td>
-                      {room.mountain.toFixed(2)} / {room.city.toFixed(2)} /{' '}
-                      {room.swamp.toFixed(2)}
-                    </td>
-                    <td className='g-gold'>
-                      {[
-                        room.fogOfWar && 'Fog',
-                        room.revealKing && 'King',
-                        room.warringStatesMode && 'States',
-                      ]
-                        .filter(Boolean)
-                        .join(' · ') || '—'}
-                    </td>
-                    <td>
-                      <span
-                        className={`g-room-status${room.gameStarted ? ' active' : ''}`}
-                      >
-                        {room.gameStarted ? 'Playing' : 'Waiting'}
-                      </span>
-                    </td>
-                    <td>
-                      <button
-                        className='g-button g-button-blue'
-                        disabled={
-                          busy ||
-                          room.gameStarted ||
-                          room.players.length >= room.maxPlayers
-                        }
-                        onClick={() => void joinRoom(room.id)}
-                      >
-                        Join
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {loading ? (
-              <div className='g-empty'>Loading rooms…</div>
-            ) : roomList.length === 0 ? (
-              <div className='g-empty'>
-                {online
-                  ? 'No rooms available. Create the first battle.'
-                  : 'Server unavailable. Retrying…'}
-              </div>
-            ) : null}
-          </div>
-        </section>
-      </div>
-    </main>
-  );
+          </label>
+        </div>
+        <button
+          className='g-button g-flow-submit g-button-steel'
+          disabled={!code.trim() || busy}
+          onClick={() => void joinRoom(code)}
+        >
+          <LinkIcon />
+          {busy ? 'Joining…' : 'Join Room'}
+          <ArrowForwardIcon className='g-button-arrow' />
+        </button>
+        {error && (
+          <p className='g-error' role='alert'>
+            {error}
+          </p>
+        )}
+        </div>
+      </section>
+    );
+
+  return null;
 }

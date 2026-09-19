@@ -2,7 +2,6 @@ import { ReactNode, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
-import SportsEsportsOutlinedIcon from '@mui/icons-material/SportsEsportsOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 
 export function CrownMark({ className = '' }: { className?: string }) {
@@ -71,14 +70,18 @@ export function HowToPlayModal({
           <p>
             Your General is your most important tile. <b>Protect it!</b>
           </p>
-          <p>If an enemy captures your General, you are eliminated from the game.</p>
+          <p>
+            If an enemy captures your General, you are eliminated from the game.
+          </p>
 
           <h3>3. Move Your Soldiers</h3>
           <p>
             Select one of your owned tiles, then select an <b>adjacent tile</b>{' '}
             to move your soldiers.
           </p>
-          <p>You can move through your own territory or attack an enemy tile.</p>
+          <p>
+            You can move through your own territory or attack an enemy tile.
+          </p>
           <p>
             You can also use <b>W / A / S / D</b> to move around the map.
           </p>
@@ -102,9 +105,7 @@ export function HowToPlayModal({
           </ul>
 
           <h3>5. Capture Territory</h3>
-          <p>
-            Send your soldiers into an enemy-controlled tile to attack it.
-          </p>
+          <p>Send your soldiers into an enemy-controlled tile to attack it.</p>
           <p>
             If you have more soldiers than the defender, you capture the tile
             and the remaining soldiers stay there.
@@ -112,7 +113,8 @@ export function HowToPlayModal({
           <div className='g-htp-example'>
             <span>Example</span>
             <p>
-              You attack with <b>8 soldiers</b> against <b>5 defending soldiers</b>.
+              You attack with <b>8 soldiers</b> against{' '}
+              <b>5 defending soldiers</b>.
             </p>
             <p>
               You capture the tile with <b>3 soldiers remaining</b>.
@@ -155,18 +157,78 @@ export function HowToPlayModal({
                 </tr>
               </thead>
               <tbody>
-                <tr><td>Move Around</td><td><b>W / A / S / D</b></td></tr>
-                <tr><td>Move on Mobile</td><td><b>Touch &amp; Drag</b></td></tr>
-                <tr><td>Open Chat</td><td><b>Enter</b></td></tr>
-                <tr><td>Undo Move</td><td><b>E</b></td></tr>
-                <tr><td>Clear Queued Moves</td><td><b>Q</b></td></tr>
-                <tr><td>Select General</td><td><b>G</b></td></tr>
-                <tr><td>Center on Home</td><td><b>H</b></td></tr>
-                <tr><td>Center Map</td><td><b>C</b></td></tr>
-                <tr><td>Toggle 50%</td><td><b>Z</b> / <b>Double Click</b></td></tr>
-                <tr><td>Set Zoom Preset</td><td><b>1 / 2 / 3</b></td></tr>
-                <tr><td>Zoom In / Out</td><td><b>Mouse Wheel</b></td></tr>
-                <tr><td>Surrender</td><td><b>Escape</b></td></tr>
+                <tr>
+                  <td>Move Around</td>
+                  <td>
+                    <b>W / A / S / D</b>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Move on Mobile</td>
+                  <td>
+                    <b>Touch &amp; Drag</b>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Open Chat</td>
+                  <td>
+                    <b>Enter</b>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Undo Move</td>
+                  <td>
+                    <b>E</b>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Clear Queued Moves</td>
+                  <td>
+                    <b>Q</b>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Select General</td>
+                  <td>
+                    <b>G</b>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Center on Home</td>
+                  <td>
+                    <b>H</b>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Center Map</td>
+                  <td>
+                    <b>C</b>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Toggle 50%</td>
+                  <td>
+                    <b>Z</b> / <b>Double Click</b>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Set Zoom Preset</td>
+                  <td>
+                    <b>1 / 2 / 3</b>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Zoom In / Out</td>
+                  <td>
+                    <b>Mouse Wheel</b>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Surrender</td>
+                  <td>
+                    <b>Escape</b>
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -191,13 +253,6 @@ export function PageHeader({ online = false }: { online?: boolean }) {
               <HomeOutlinedIcon />
               Home
             </Link>
-            <Link
-              className={router.pathname === '/play' ? 'active' : ''}
-              href='/play'
-            >
-              <SportsEsportsOutlinedIcon />
-              Play
-            </Link>
             <button onClick={() => setRulesOpen(true)}>
               <MenuBookOutlinedIcon />
               How to Play
@@ -205,12 +260,6 @@ export function PageHeader({ online = false }: { online?: boolean }) {
           </nav>
           <div className='g-header-right'>
             <Status online={online} />
-            <Link
-              className='g-button g-button-blue g-header-join'
-              href='/player-details'
-            >
-              Join Game
-            </Link>
           </div>
         </div>
       </header>

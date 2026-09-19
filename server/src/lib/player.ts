@@ -108,9 +108,6 @@ class Player {
     this.abilities = [];
     this.activeChallenge = null;
     this.activeCodeforcesChallenge = null;
-    this.codeforcesSolvedSet = new Set<string>();
-    this.codeforcesSolvedSetReady = false;
-    this.codeforcesHistoryLoading = false;
     this.rewardedCodeforcesSubmissionIds = [];
     this.lastCodeforcesVerificationAt = 0;
     this.challengeCooldownUntilTurn = 0;

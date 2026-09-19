@@ -33,12 +33,18 @@ export default function PlayerDetails() {
     if (!trimmedName) return;
     const trimmedHandle = handle.trim();
     if (trimmedHandle && !/^[A-Za-z0-9_.-]{3,24}$/.test(trimmedHandle)) {
-      setError('Codeforces handles must be 3–24 letters, numbers, underscores, dots, or hyphens.');
+      setError(
+        'Codeforces handles must be 3–24 letters, numbers, underscores, dots, or hyphens.'
+      );
       return;
     }
     setError('');
     savePlayerProfile({ name: trimmedName, handle: trimmedHandle });
-    router.push('/play');
+    const next =
+      typeof router.query.next === 'string' ? router.query.next : '/';
+    router.push(
+      next.startsWith('/') && !next.startsWith('//') ? next : '/'
+    );
   };
   return (
     <PageFrame online={online}>
@@ -89,7 +95,11 @@ export default function PlayerDetails() {
               <button className='g-button g-button-blue' type='submit'>
                 Continue <ArrowForwardIcon />
               </button>
-              {error && <p className='g-error' role='alert'>{error}</p>}
+              {error && (
+                <p className='g-error' role='alert'>
+                  {error}
+                </p>
+              )}
               <div className='g-or'>
                 <i />
                 or

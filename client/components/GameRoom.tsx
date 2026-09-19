@@ -21,6 +21,7 @@ import Game from '@/components/game/Game';
 import { useGame, useGameDispatch } from '@/context/GameContext';
 import GameSetting from '@/components/GameSetting';
 import GameLoading from '@/components/GameLoading';
+import { readPlayerProfile } from '@/lib/player-profile';
 
 function GamingRoom() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -182,6 +183,7 @@ function GamingRoom() {
         query: {
           roomId: roomId,
           username: usernameFromStorage,
+          codeforcesHandle: readPlayerProfile().handle,
         },
         auth: savedSession || {},
       });
@@ -270,6 +272,22 @@ function GamingRoom() {
         duration: 3000,
       });
     });
+
+    socket.on(
+      'challenge_error',
+      (result: { source?: string; message?: string }) => {
+        snackStateDispatch({
+          type: 'update',
+          title:
+            result.source === 'CODEFORCES'
+              ? 'Codeforces handle error'
+              : 'Challenge error',
+          status: 'error',
+          message: result.message || 'Unable to prepare commander challenges.',
+          duration: 6000,
+        });
+      }
+    );
 
     socket.on('room_message', (player: UserData | null, content: string) => {
       setMessages((messages: any) => [
@@ -384,7 +402,7 @@ function GamingRoom() {
         socket.auth = {};
       }
       void router.replace({
-        pathname: '/play',
+        pathname: '/',
         query: { joinError: message || 'Could not join this room.' },
       });
     });
@@ -434,7 +452,7 @@ function GamingRoom() {
         open={snackState.open}
         autoHideDuration={snackState.duration}
         onClose={() => {
-        snackStateDispatch({ type: 'close' });
+          snackStateDispatch({ type: 'close' });
         }}
       >
         <Alert severity={snackState.status} sx={{ width: '100%' }}>
@@ -442,11 +460,20 @@ function GamingRoom() {
           {snackState.message}
         </Alert>
       </Snackbar>
-      {roomUiStatus === RoomUiStatus.gameSetting && (
-        room.id && myPlayerId ? (
-          <GameSetting chat={<ChatBox socket={socketRef.current} messages={messages} embedded />} />
-        ) : <GameLoading />
-      )}
+      {roomUiStatus === RoomUiStatus.gameSetting &&
+        (room.id && myPlayerId ? (
+          <GameSetting
+            chat={
+              <ChatBox
+                socket={socketRef.current}
+                messages={messages}
+                embedded
+              />
+            }
+          />
+        ) : (
+          <GameLoading />
+        ))}
       {roomUiStatus === RoomUiStatus.loading && (
         <div className='center-layout'>
           <GameLoading />
@@ -455,8 +482,9 @@ function GamingRoom() {
       {(roomUiStatus === RoomUiStatus.gameRealStarted ||
         roomUiStatus === RoomUiStatus.gameOverConfirm) && <Game />}
       {(roomUiStatus === RoomUiStatus.gameRealStarted ||
-        roomUiStatus === RoomUiStatus.gameOverConfirm) &&
-        <ChatBox socket={socketRef.current} messages={messages} compact />}
+        roomUiStatus === RoomUiStatus.gameOverConfirm) && (
+        <ChatBox socket={socketRef.current} messages={messages} compact />
+      )}
     </div>
   );
 }
