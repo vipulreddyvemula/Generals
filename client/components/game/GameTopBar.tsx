@@ -6,7 +6,9 @@ import HourglassEmptyOutlinedIcon from '@mui/icons-material/HourglassEmptyOutlin
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import SignalCellularAltIcon from '@mui/icons-material/SignalCellularAlt';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import { Brand, CrownMark, HowToPlayModal, Status } from '@/components/GeneralsUi';
+import { InGameTutorial } from '@/components/InGameTutorial';
 import { useGame } from '@/context/GameContext';
 
 export default function GameTopBar({
@@ -19,6 +21,15 @@ export default function GameTopBar({
   const [copied, setCopied] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [htpOpen, setHtpOpen] = useState(false);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  
+  useEffect(() => {
+    if (!localStorage.getItem('generals_tutorial_completed')) {
+      setTutorialOpen(true);
+      localStorage.setItem('generals_tutorial_completed', 'true');
+    }
+  }, []);
+
   useEffect(() => {
     let alive = true;
     const check = async () => {
@@ -122,6 +133,14 @@ export default function GameTopBar({
         >
           <HelpOutlineIcon />
         </button>
+        <button
+          className='g-button g-button-outline g-icon-button'
+          onClick={() => setTutorialOpen(true)}
+          aria-label='Tutorial'
+          title='Tutorial'
+        >
+          <SchoolOutlinedIcon />
+        </button>
         <button className='g-button g-button-danger' onClick={onSurrender}>
           <FlagOutlinedIcon />
           Surrender
@@ -129,6 +148,7 @@ export default function GameTopBar({
       </div>
     </header>
     <HowToPlayModal open={htpOpen} onClose={() => setHtpOpen(false)} />
+    <InGameTutorial run={tutorialOpen} onFinish={() => setTutorialOpen(false)} />
     </>
   );
 }

@@ -524,7 +524,7 @@ export default function CommanderPanel() {
         />
       </Box>
 
-      <Box sx={{ ...cardSx, background: 'rgba(4, 16, 25, .6)', borderColor: 'rgba(104,148,171,.34)' }}>
+      <Box className='g-tutorial-energy' sx={{ ...cardSx, background: 'rgba(4, 16, 25, .6)', borderColor: 'rgba(104,148,171,.34)' }}>
         <Box
           sx={{
             display: 'flex',
@@ -607,12 +607,12 @@ export default function CommanderPanel() {
         }}
       >
         <Tab icon={<ExtensionOutlinedIcon sx={{ fontSize: 17 }} />} iconPosition='start' label='CHALLENGES' value='CHALLENGES' />
-        <Tab icon={<GavelOutlinedIcon sx={{ fontSize: 17 }} />} iconPosition='start' label='ABILITIES' value='ABILITIES' />
+        <Tab className='g-tutorial-abilities-tab' icon={<GavelOutlinedIcon sx={{ fontSize: 17 }} />} iconPosition='start' label='ABILITIES' value='ABILITIES' />
       </Tabs>
 
       {activeTab === 'CHALLENGES' && (
         <>
-          <Box sx={{ ...cardSx, borderColor: 'rgba(70,124,216,.52)' }}>
+          <Box className='g-tutorial-math' sx={{ ...cardSx, borderColor: 'rgba(70,124,216,.52)' }}>
             <Box
               sx={{
                 display: 'flex',
@@ -681,6 +681,7 @@ export default function CommanderPanel() {
           </Box>
 
           <Box
+            className='g-tutorial-codeforces'
             sx={{
               ...cardSx,
               borderColor: 'rgba(70,124,216,.58)',
