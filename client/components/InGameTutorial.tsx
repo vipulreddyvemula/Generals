@@ -5,7 +5,7 @@ export function InGameTutorial({ run, onFinish }: { run: boolean; onFinish: () =
   const { t } = useTranslation();
   const [currentStep, setCurrentStep] = useState(0);
 
-  const steps = [
+  const steps = React.useMemo(() => [
     {
       target: 'body',
       title: 'Welcome to Commander Mode!',
@@ -54,7 +54,7 @@ export function InGameTutorial({ run, onFinish }: { run: boolean; onFinish: () =
       content: 'Once you have enough energy, click the ABILITIES tab to cast game-changing powers like Scout and Airstrike!',
       placement: 'left',
     },
-  ];
+  ], []);
 
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
 
@@ -73,7 +73,7 @@ export function InGameTutorial({ run, onFinish }: { run: boolean; onFinish: () =
     } else {
       setTargetRect(null);
     }
-  }, [run, currentStep]);
+  }, [run, currentStep, steps]);
 
   const step = steps[currentStep];
   
