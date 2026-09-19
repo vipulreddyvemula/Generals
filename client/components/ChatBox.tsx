@@ -21,8 +21,8 @@ function ChatMessage({ message, embedded = false }: { message: Message; embedded
     <Typography
       component='div'
       sx={{
-        fontSize: embedded ? 13 : 11,
-        lineHeight: 1.45,
+        fontSize: embedded ? 15 : 16,
+        lineHeight: 1.6,
         color: 'rgba(238,246,255,.82)',
         overflowWrap: 'anywhere',
       }}
@@ -140,8 +140,8 @@ export default React.memo(function ChatBox({
         left: compact ? 16 : embedded ? 'auto' : 0,
         bottom: compact ? 16 : embedded ? 'auto' : 0,
         zIndex: 1200,
-        width: embedded ? '100%' : compact ? 300 : 350,
-        height: embedded ? '100%' : compact ? 270 : '40vh',
+        width: embedded ? '100%' : compact ? 420 : 350,
+        height: embedded ? '100%' : compact ? 480 : '40vh',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -165,7 +165,7 @@ export default React.memo(function ChatBox({
       >
         <Typography
           sx={{
-            fontSize: embedded ? 15 : 9,
+            fontSize: embedded ? 15 : 15,
             letterSpacing: 1.6,
             fontWeight: 900,
           color: embedded ? '#eef4f6' : '#d9b765',
@@ -197,7 +197,7 @@ export default React.memo(function ChatBox({
       >
         {messages.length === 0 && (
           <Typography
-            sx={{ m: 'auto', fontSize: 10, color: 'rgba(235,245,255,.35)' }}
+            sx={{ m: 'auto', fontSize: 15, color: 'rgba(235,245,255,.35)' }}
           >
             No transmissions yet.
           </Typography>
@@ -214,7 +214,7 @@ export default React.memo(function ChatBox({
       {socket && (
         <>
           <Divider sx={{ borderColor: 'rgba(255,255,255,.08)' }} />
-          <Box sx={{ display: 'flex', alignItems: 'center', p: embedded ? 1.5 : .3, gap: .7 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', p: embedded ? 1.5 : 1, gap: .7 }}>
             <InputBase
               inputRef={inputRef}
               value={inputValue}
@@ -227,10 +227,10 @@ export default React.memo(function ChatBox({
               sx={{
                 flex: 1,
                 minWidth: 0,
-                height: embedded ? 42 : 38,
+                height: embedded ? 42 : 44,
                 px: 1.25,
                 color: '#fff',
-                fontSize: embedded ? 13 : 11,
+                fontSize: embedded ? 15 : 16,
                 bgcolor: 'rgba(0,0,0,.2)',
                 border: '1px solid rgba(104,148,171,.34)',
                 borderRadius: '5px',

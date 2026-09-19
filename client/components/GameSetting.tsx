@@ -219,11 +219,15 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
                 <MenuItem value='' disabled>
                   Choose team
                 </MenuItem>
-                {Array.from({ length: MaxTeamNum }, (_, index) => (
-                  <MenuItem key={index} value={index + 1}>
-                    Team {index + 1}
-                  </MenuItem>
-                ))}
+                {Array.from({ length: MaxTeamNum }, (_, index) => {
+                  const teamNumber = index + 1;
+                  const isOccupied = room.players.some((p) => p.team === teamNumber);
+                  return (
+                    <MenuItem key={index} value={teamNumber}>
+                      Team {teamNumber} {isOccupied ? '(Occupied)' : ''}
+                    </MenuItem>
+                  );
+                })}
                 <MenuItem value={MaxTeamNum + 1}>Spectators</MenuItem>
               </Select>
             </div>
