@@ -74,11 +74,14 @@ export function cleanupFinishedRoom(room: Room): void {
   for (const player of connectedPlayers) {
     player.reset();
     player.disconnected = false;
+    if (player.id === 'bot-player-id') {
+      player.forceStart = true;
+    }
   }
 
   room.players = connectedPlayers;
   room.gameStarted = false;
-  room.forceStartNum = 0;
+  room.forceStartNum = room.players.filter(p => p.forceStart).length;
   room.mapGenerated = false;
   room.globalMapDiff = null;
   room.gameRecord = null;

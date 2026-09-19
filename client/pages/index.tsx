@@ -7,6 +7,7 @@ import SportsEsportsOutlinedIcon from '@mui/icons-material/SportsEsportsOutlined
 import SignalCellularAltIcon from '@mui/icons-material/SignalCellularAlt';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import GavelOutlinedIcon from '@mui/icons-material/GavelOutlined';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import {
   BattlefieldBackdrop,
   Brand,
@@ -42,7 +43,7 @@ export default function Home() {
           <p className='g-hero-description'>
             Join a game, command your army, and conquer the map.
           </p>
-          <div className='g-hero-actions'>
+          <div className='g-hero-actions' style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', maxWidth: '800px', margin: '0 auto 40px' }}>
             <Link
               href='/player-details'
               className='g-button g-button-blue g-hero-action'
@@ -60,9 +61,19 @@ export default function Home() {
               <MenuBookOutlinedIcon />
               <span>
                 <b>How to Play</b>
-                <small>Learn the Basics</small>
+                <small>Read the Basics</small>
               </span>
             </button>
+            <Link
+              href='/player-details?tutorial=true'
+              className='g-button g-button-outline g-hero-action'
+            >
+              <SchoolOutlinedIcon />
+              <span>
+                <b>Interactive Tutorial</b>
+                <small>Play a Guided Match</small>
+              </span>
+            </Link>
           </div>
           <div className='g-panel g-stat-strip'>
             <div className='g-mini-stat green'>

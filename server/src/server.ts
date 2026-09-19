@@ -102,6 +102,37 @@ app.get('/create_room', async (req: Request, res: Response) => {
   }
 });
 
+app.get('/create_sandbox', async (req: Request, res: Response) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  if (!httpRateLimiter.allow(`http:${ip}`, 'create_room', CREATE_ROOM_HTTP_POLICY)) {
+    res.status(429).json({ success: false, message: 'Too many room creation requests. Please wait.' });
+    return;
+  }
+  const result = await createRoom();
+  if (result.success && result.roomId) {
+    const room = roomPool[result.roomId];
+    if (room) {
+      room.roomName = 'Sandbox Training';
+      room.isSandbox = true;
+      room.gameSpeed = 4; // Max speed for fast troop generation
+      // Create an idle bot so the game can start
+      const bot = new Player(
+        'bot-player-id', // id
+        '',              // socket_id
+        'Idle Bot',      // username
+        1,               // color (blue or red)
+        2,               // team
+      );
+      bot.forceStart = true;
+      room.players.push(bot);
+      room.forceStartNum++;
+    }
+    res.status(200).json(result);
+  } else {
+    res.status(500).json(result);
+  }
+});
+
 app.get('/get_replay/:replayId', async (req: Request, res: Response) => {
   const replayId = req.params.replayId;
   const replayFilePath = path.join(process.cwd(), 'records', `${replayId}.json`);
@@ -176,7 +207,7 @@ app.get('/health', (_req, res) => {
 });
 
 function getCodeforcesEligiblePlayers(room: Room): Player[] {
-  return room.players.filter((candidate) => !candidate.isDead && !candidate.disconnected && !candidate.spectating());
+  return room.players.filter((candidate) => !candidate.isDead && !candidate.disconnected && !candidate.spectating() && candidate.id !== 'bot-player-id');
 }
 
 function emitCodeforcesQueueStatus(room: Room, io: Server): void {
@@ -286,12 +317,16 @@ function removeRoomParticipant(room: Room, player: Player, io: Server): void {
   player.socket_id = '';
   player.forceStart = false;
   room.players = room.players.filter((candidate) => candidate !== player);
+  if (room.players.every((candidate) => candidate.id === 'bot-player-id')) {
+    room.players = [];
+  }
   room.forceStartNum = room.players.filter((candidate) => candidate.forceStart).length;
   if (room.players.length === 0 && !room.keepAlive) {
     delete roomPool[room.id];
   } else {
     if (room.players.length > 0 && !room.players.some((candidate) => candidate.isRoomHost)) {
-      room.players[0].setRoomHost(true);
+      const nextHost = room.players.find((candidate) => candidate.id !== 'bot-player-id') || room.players[0];
+      nextHost.setRoomHost(true);
     }
     io.in(room.id).emit('update_room', room);
     if (!room.gameStarted) void checkForcedStart(room, io);
@@ -367,6 +402,9 @@ function handleGame(room: Room, io: Server): void {
     room.codeforcesQueue = null;
     room.players.forEach((player) => {
       player.reset();
+      if (room.isSandbox && player.id !== 'bot-player-id') {
+        player.energy = 1000;
+      }
     });
 
     const actualWidth = Math.ceil(Math.sqrt(room.players.length) * 5 + 12 * room.mapWidth);
@@ -458,7 +496,7 @@ function handleGame(room: Room, io: Server): void {
                   captor.winLand(capturedKingBlock);
                 }
                 if (!room.codeforcesQueue) tryInitializeCodeforcesQueue(room, io);
-              } else if (!player.disconnected && gameMap.turn - player.lastMoveTurn >= 2000) {
+              } else if (!player.disconnected && player.id !== 'bot-player-id' && gameMap.turn - player.lastMoveTurn >= 2000) {
                 // AFK: no movement for 2000 turns.
                 // lastMoveTurn is updated exclusively by the attack handler.
                 neutralizePlayer(room, player);
@@ -645,7 +683,7 @@ io.on('connection', async (socket) => {
     player = new Player(playerId, socket.id, username, playerColor, playerTeam);
     console.log(`Connect! Socket ${socket.id}, room ${roomId} name ${username} playerId ${playerId} color ${playerColor}`);
 
-    if (room.players.length === 0) {
+    if (room.players.length === 0 || room.players.every((candidate) => candidate.id === 'bot-player-id')) {
       player.setRoomHost(true);
     }
 
