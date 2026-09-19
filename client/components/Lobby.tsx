@@ -270,14 +270,38 @@ export default function Lobby({ roomBrowser }: { roomBrowser: ReturnType<typeof 
               ))}
             </div>
           </div>
-          <button
-            className='g-button g-button-blue'
-            disabled={busy || !online}
-            onClick={createRoom}
-          >
-            <AddIcon />
-            {busy ? 'Creating…' : 'Create Room'}
-          </button>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              className='g-button g-button-blue'
+              disabled={busy || !online}
+              onClick={createRoom}
+              style={{ flex: 1 }}
+            >
+              <AddIcon />
+              {busy ? 'Creating...' : 'Create Room'}
+            </button>
+            <button
+              className='g-button g-button-outline'
+              disabled={busy || !online}
+              onClick={async () => {
+                setBusy(true);
+                setError('');
+                try {
+                  const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_API}/create_sandbox`);
+                  const result = await response.json();
+                  if (!response.ok || !result.roomId) throw new Error('Could not create sandbox.');
+                  await router.push(`/rooms/${result.roomId}`);
+                } catch (cause) {
+                  setError(cause instanceof Error ? cause.message : 'Could not create sandbox.');
+                  setBusy(false);
+                }
+              }}
+              style={{ flex: 1 }}
+              title='Play against a static bot to practice abilities'
+            >
+              Sandbox Training
+            </button>
+          </div>
           {error && (
             <p className='g-error' role='alert'>
               {error}

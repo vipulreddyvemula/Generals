@@ -148,7 +148,8 @@ export class Room {
     public generals: Point[] = new Array<Point>(),
     public keepAlive: boolean = false, // keep alive after game over
     public revealKing: boolean = false, // reveal all king
-    public warringStatesMode: boolean = false // warring states 战国 mode
+    public warringStatesMode: boolean = false, // warring states 战国 mode
+    public isSandbox: boolean = false // sandbox training mode
   ) {}
 
   static create(options: Partial<Room>): Room {
@@ -175,7 +176,8 @@ export class Room {
       options.generals,
       options.keepAlive,
       options.revealKing,
-      options.warringStatesMode
+      options.warringStatesMode,
+      options.isSandbox
     );
   }
 

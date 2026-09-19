@@ -38,7 +38,22 @@ export default function PlayerDetails() {
     }
     setError('');
     savePlayerProfile({ name: trimmedName, handle: trimmedHandle });
-    router.push('/play');
+    
+    if (router.query.tutorial) {
+      localStorage.removeItem('generals_tutorial_completed');
+      fetch(`${process.env.NEXT_PUBLIC_SERVER_API}/create_sandbox`)
+        .then((res) => res.json())
+        .then((result) => {
+          if (result.success && result.roomId) {
+            router.push(`/rooms/${result.roomId}`);
+          } else {
+            router.push('/play');
+          }
+        })
+        .catch(() => router.push('/play'));
+    } else {
+      router.push('/play');
+    }
   };
   return (
     <PageFrame online={online}>
