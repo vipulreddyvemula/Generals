@@ -8,6 +8,8 @@ import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import MilitaryTechOutlinedIcon from '@mui/icons-material/MilitaryTechOutlined';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import AddIcon from '@mui/icons-material/Add';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { MenuItem, Select } from '@mui/material';
 import { useGame } from '@/context/GameContext';
 import {
@@ -17,7 +19,8 @@ import {
   SpeedOptions,
 } from '@/lib/constants';
 import { pendingRoomSettingsKey, PendingRoomSettings } from './Lobby';
-import { BattlefieldBackdrop, PageFrame } from './GeneralsUi';
+import { BattlefieldBackdrop, PageFrame, Brand, Ornament } from './GeneralsUi';
+import { readPlayerProfile, savePlayerProfile } from '@/lib/player-profile';
 
 function SettingRow({ label, value }: { label: string; value: string }) {
   return (
@@ -56,6 +59,21 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
     room.commanderDifficultyMode === 'CF_RATING'
       ? `CF ${room.commanderCodeforcesRating}`
       : clistTiers[room.commanderClistTier] || clistTiers[0];
+
+  const [newHandle, setNewHandle] = useState('');
+
+  const submitNewHandle = () => {
+    const handle = newHandle.trim();
+    if (!handle) return;
+    socketRef.current?.emit('update_codeforces_handle', handle);
+    try {
+      const saved = readPlayerProfile();
+      saved.handle = handle;
+      savePlayerProfile(saved);
+    } catch (e) {}
+  };
+
+
 
   useEffect(() => {
     setNameDraft(room.roomName);
@@ -130,6 +148,64 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
       setCopied(false);
     }
   };
+
+  if (me && me.team !== MaxTeamNum + 1 && (!me.codeforcesHandle || !me.codeforcesSolvedSetReady)) {
+    return (
+      <PageFrame online={Boolean(socketRef.current?.connected)}>
+        <BattlefieldBackdrop>
+          <main className='g-details-main g-room-flow-main'>
+            <Ornament />
+            <h1>
+              <Brand large />
+            </h1>
+            <p className='g-hero-tagline'>Strategy. Territory. Victory.</p>
+            <section className='g-panel g-flow-card'>
+              <div className='g-flow-card-inner'>
+                <header className='g-flow-heading'>
+                  <div>
+                    <h2>Codeforces Handle</h2>
+                    <p>A valid Codeforces handle is required to play.</p>
+                  </div>
+                </header>
+                <div className='g-flow-fields'>
+                  <label className='g-flow-field'>
+                    <span>Codeforces Handle</span>
+                    <input
+                      className='g-input'
+                      maxLength={24}
+                      value={newHandle}
+                      onChange={(e) => setNewHandle(e.target.value)}
+                      placeholder='Enter your Codeforces handle'
+                      disabled={Boolean(me.codeforcesHandle && !me.codeforcesSolvedSetReady)}
+                    />
+                  </label>
+                </div>
+                <button
+                  className='g-button g-flow-submit'
+                  disabled={Boolean(!newHandle.trim() || (me.codeforcesHandle && !me.codeforcesSolvedSetReady))}
+                  onClick={submitNewHandle}
+                  style={{ marginTop: '24px' }}
+                >
+                  <AddIcon />
+                  {me.codeforcesHandle && !me.codeforcesSolvedSetReady ? 'Verifying...' : 'Submit & Verify'}
+                  <ArrowForwardIcon className='g-button-arrow' />
+                </button>
+                {me.codeforcesHandle && !me.codeforcesSolvedSetReady ? (
+                  <p className='g-muted' style={{ marginTop: '16px', fontSize: '14px', textAlign: 'center' }}>
+                    Please wait while we verify your Codeforces history...
+                  </p>
+                ) : (
+                  <p className='g-error' role='alert' style={{ marginTop: '16px', textAlign: 'center' }}>
+                    Invalid or missing Codeforces handle.
+                  </p>
+                )}
+              </div>
+            </section>
+          </main>
+        </BattlefieldBackdrop>
+      </PageFrame>
+    );
+  }
 
   return (
     <PageFrame online={Boolean(socketRef.current?.connected)}>
@@ -467,8 +543,8 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
           <div>
             <button
               className={`g-button ${me?.forceStart ? 'g-button-outline' : 'g-button-ready'}`}
-              disabled={!me || me.team === MaxTeamNum + 1}
-              onClick={() => socketRef.current.emit('force_start')}
+              disabled={!me || me.team === MaxTeamNum + 1 || !me.codeforcesHandle || !me.codeforcesSolvedSetReady}
+              onClick={() => socketRef.current?.emit('force_start')}
             >
               <CheckCircleOutlineIcon />
               {me?.forceStart ? 'Not Ready' : 'Ready'}

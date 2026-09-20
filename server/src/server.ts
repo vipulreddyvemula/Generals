@@ -417,6 +417,18 @@ async function checkForcedStart(room: Room, io: Server) {
       );
       return;
     }
+
+    const missingHandles = activePlayers.filter(
+      (player) => !player.codeforcesHandle || !player.codeforcesSolvedSetReady
+    );
+    if (missingHandles.length > 0) {
+      io.in(room.id).emit(
+        'error',
+        'Match cannot start',
+        'All active players must have a valid Codeforces handle that has finished syncing.'
+      );
+      return;
+    }
     try {
       await startRoomOnce(room, () => handleGame(room, io));
     } catch (error) {
@@ -864,6 +876,22 @@ io.on('connection', async (socket) => {
     } catch (e: any) {
       console.error('change_room_setting failed:', e);
       socket.emit('error', 'Modification was failed', 'Unable to change that room setting.');
+    }
+  });
+
+  socket.on('update_codeforces_handle', async (handle: string) => {
+    if (room.gameStarted) return;
+    const player = resolveSocketPlayer(room, socket.id);
+    if (!player || player.spectating()) return;
+    
+    player.codeforcesHandle = String(handle || '').trim();
+    player.codeforcesSolvedSetReady = false;
+    player.codeforcesHistoryLoading = false;
+    player.codeforcesSolvedSet = new Set<string>();
+    
+    io.in(room.id).emit('update_room', room);
+    if (player.codeforcesHandle) {
+      void prepareCodeforcesHistory(room, player, io);
     }
   });
 
