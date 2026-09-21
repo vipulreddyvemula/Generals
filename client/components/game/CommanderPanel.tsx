@@ -1,4 +1,7 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import {
   Box,
   Button,
@@ -907,15 +910,24 @@ export default function CommanderPanel() {
                   {mathChallenge ? (
                     <>
                       <Typography
+                        component='div'
                         sx={{
                           fontSize: 15,
                           fontWeight: 700,
                           lineHeight: 1.35,
                           minHeight: 34,
                           mt: 1.5,
+                          color: '#eef4f6',
+                          '& p': { m: 0 },
+                          '& .katex': { color: '#eef4f6' },
                         }}
                       >
-                        {mathChallenge.question}
+                        <ReactMarkdown
+                          remarkPlugins={[remarkMath]}
+                          rehypePlugins={[rehypeKatex]}
+                        >
+                          {mathChallenge.question}
+                        </ReactMarkdown>
                       </Typography>
                       <Box
                         component='form'

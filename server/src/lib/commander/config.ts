@@ -6,10 +6,10 @@ export const COMMANDER_CONFIG = {
     expiresAfterTurns: 360,
     cooldownTurns: 12,
     rewards: {
-      EASY: { energy: 1, troops: 1 },
-      MEDIUM: { energy: 2, troops: 2 },
-      HARD: { energy: 4, troops: 3 },
-      EXPERT: { energy: 5, troops: 5 },
+      EASY: { energy: 3, troops: 1 },
+      MEDIUM: { energy: 3, troops: 1 },
+      HARD: { energy: 3, troops: 1 },
+      EXPERT: { energy: 3, troops: 1 },
     } satisfies Record<MathDifficulty, { energy: number; troops: number }>,
   },
   codeforces: {

@@ -6,6 +6,7 @@ import LinkIcon from '@mui/icons-material/Link';
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import { Room } from '@/lib/types';
 import { useRooms } from '@/lib/use-rooms';
 import { readPlayerProfile, savePlayerProfile } from '@/lib/player-profile';
@@ -259,7 +260,7 @@ function RoomSettings({
   );
 }
 
-export type RoomFlowMode = 'create' | 'join';
+export type RoomFlowMode = 'create' | 'join' | 'tutorial';
 
 export function RoomFlow({
   mode,
@@ -359,6 +360,26 @@ export function RoomFlow({
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : 'Could not join the room.'
+      );
+      setBusy(false);
+    }
+  };
+
+  const startTutorial = async () => {
+    if (!saveIdentity()) return;
+    setBusy(true);
+    setError('');
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SERVER_API}/create_sandbox`
+      );
+      const data = await response.json();
+      if (!response.ok || !data.success || !data.roomId)
+        throw new Error(data.message || 'Failed to create the tutorial room.');
+      await router.push(`/rooms/${data.roomId}?tutorial=true`);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : 'Could not start the tutorial.'
       );
       setBusy(false);
     }
@@ -526,6 +547,61 @@ export function RoomFlow({
           {busy ? 'Joining…' : 'Join Room'}
           <ArrowForwardIcon className='g-button-arrow' />
         </button>
+        {error && (
+          <p className='g-error' role='alert'>
+            {error}
+          </p>
+        )}
+        </div>
+      </section>
+    );
+
+  if (mode === 'tutorial')
+    return (
+      <section className='g-panel g-flow-card'>
+        <div className='g-flow-card-inner'>
+        <header className='g-flow-heading'>
+          <div>
+            <h2>Interactive Tutorial</h2>
+            <p>Learn by playing · Free practice with extra energy.</p>
+          </div>
+        </header>
+        <div className='g-flow-fields'>
+          <label className='g-flow-field'>
+            <span>Commander Name</span>
+            <input
+              className='g-input'
+              maxLength={24}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder='Enter your name'
+            />
+          </label>
+          <label className='g-flow-field'>
+            <span>Codeforces Handle</span>
+            <input
+              className='g-input'
+              maxLength={24}
+              value={handle}
+              onChange={(event) => setHandle(event.target.value)}
+              placeholder='Enter your Codeforces handle'
+            />
+          </label>
+        </div>
+        <button
+          className='g-button g-flow-submit'
+          disabled={busy || !online}
+          onClick={() => void startTutorial()}
+        >
+          <SchoolOutlinedIcon />
+          {busy ? 'Starting…' : 'Start Tutorial'}
+          <ArrowForwardIcon className='g-button-arrow' />
+        </button>
+        {!online && (
+          <p className='g-error' role='alert'>
+            Server unavailable. Reconnecting…
+          </p>
+        )}
         {error && (
           <p className='g-error' role='alert'>
             {error}
