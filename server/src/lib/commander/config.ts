@@ -3,7 +3,7 @@ export type MathDifficulty = 'EASY' | 'MEDIUM' | 'HARD' | 'EXPERT';
 export const COMMANDER_CONFIG = {
   maxEnergy: 100,
   math: {
-    expiresAfterTurns: 60,
+    expiresAfterTurns: 360,
     cooldownTurns: 12,
     rewards: {
       EASY: { energy: 1, troops: 1 },

@@ -399,7 +399,7 @@ export default function CommanderPanel() {
         setBanner({
           source: 'CODEFORCES',
           tone: 'info',
-          title: 'NOT ACCEPTED YET',
+          title: 'NOT SOLVED YET',
           message: result.message,
         });
       }
@@ -411,7 +411,7 @@ export default function CommanderPanel() {
       setBanner({
         source: 'CODEFORCES',
         tone: 'info',
-        title: 'QUEUE COMPLETE',
+        title: 'NO MORE PROBLEMS',
         message,
       });
     };
@@ -437,7 +437,7 @@ export default function CommanderPanel() {
       setBanner({
         source: result.source,
         tone: 'error',
-        title: 'COMMAND REJECTED',
+        title: 'ACTION FAILED',
         message: result.message,
       });
     };

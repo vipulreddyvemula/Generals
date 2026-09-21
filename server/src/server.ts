@@ -763,6 +763,18 @@ io.on('connection', async (socket) => {
       };
       socket.emit('game_started', initGameInfo);
       player.patchView = new MapDiff();
+
+      // Restore active challenges for the reconnecting player
+      if (player.activeChallenge) {
+        const { correctAnswer, ...payload } = player.activeChallenge;
+        socket.emit('math_challenge', payload);
+      }
+      if (player.activeCodeforcesChallenge) {
+        socket.emit('codeforces_challenge', player.activeCodeforcesChallenge);
+      }
+      if (room.codeforcesQueue) {
+        emitCodeforcesQueueStatus(room, io);
+      }
     }
   } else {
     if (!canJoinRoom(roomPool, room)) {
@@ -1103,13 +1115,15 @@ io.on('connection', async (socket) => {
 
       // Guard: no active challenge already
       if (currPlayer.activeChallenge) {
-        socket.emit('challenge_error', { source: 'MATH', message: 'You already have an active Math challenge.' });
+        socket.emit('challenge_error', { source: 'MATH', message: 'You already have an active math question to answer.' });
         return;
       }
 
       // Guard: challenge cooldown
       if (room.map.turn < currPlayer.challengeCooldownUntilTurn) {
-        socket.emit('challenge_error', { source: 'MATH', message: 'Math systems are recharging. Please wait.' });
+        const remainingTurns = currPlayer.challengeCooldownUntilTurn - room.map.turn;
+        const remainingSeconds = Math.ceil((remainingTurns * (500 / room.gameSpeed)) / 1000);
+        socket.emit('challenge_error', { source: 'MATH', message: `You must wait ${remainingSeconds} second(s) for the math cooldown to finish.` });
         return;
       }
 
@@ -1131,7 +1145,7 @@ io.on('connection', async (socket) => {
       io.in(room.id).emit('update_room', room);
     } catch (e) {
       console.error('request_challenge error:', e);
-      socket.emit('challenge_error', { source: 'MATH', message: 'Unable to assign a Math challenge.' });
+      socket.emit('challenge_error', { source: 'MATH', message: 'Failed to get a new math question. Please try again.' });
     }
   };
 
@@ -1310,19 +1324,19 @@ io.on('connection', async (socket) => {
 
   socket.on('verify_codeforces_solution', (payload?: { contestId?: number; problemIndex?: string; queuePosition?: number }) => {
     if (!room.gameStarted || !room.map) {
-      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'The match is not active.' });
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'The game has not started yet or has already ended.' });
       return;
     }
 
     const currPlayer = room.players.find((candidate) => candidate.socket_id === socket.id);
     if (!currPlayer || currPlayer.isDead || currPlayer.disconnected || currPlayer.spectating()) {
-      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'This player cannot verify a challenge.' });
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'You cannot verify this problem.' });
       return;
     }
 
     const assignment = currPlayer.activeCodeforcesChallenge;
     if (!assignment) {
-      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'No active Codeforces assignment.' });
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'You do not have an active Codeforces problem.' });
       return;
     }
     const queuePosition = room.codeforcesQueue?.getPlayerPosition(currPlayer.id);
@@ -1458,34 +1472,34 @@ io.on('connection', async (socket) => {
 
   socket.on('skip_codeforces_challenge', (payload?: { assignmentId?: string }) => {
     if (!room.gameStarted || !room.map) {
-      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'The match is not active.' });
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'The game has not started yet or has already ended.' });
       return;
     }
 
     const currPlayer = room.players.find((candidate) => candidate.socket_id === socket.id);
     if (!currPlayer || currPlayer.isDead || currPlayer.disconnected || currPlayer.spectating()) {
-      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'This player cannot override a challenge.' });
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'You do not have permission to skip this problem.' });
       return;
     }
 
     const assignment = currPlayer.activeCodeforcesChallenge;
     const queue = room.codeforcesQueue;
     if (!assignment || !queue || !queue.hasPlayer(currPlayer.id)) {
-      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'No active Codeforces assignment.' });
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'You do not have an active Codeforces problem.' });
       return;
     }
     if (payload?.assignmentId !== assignment.id) {
-      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'That Codeforces assignment is no longer active.' });
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'This Codeforces problem has expired or is no longer active.' });
       return;
     }
     if (assignment.verificationInProgress) {
-      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'Wait for the current verification to finish.' });
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'Please wait while we verify your last submission.' });
       return;
     }
 
     const queuePosition = queue.getPlayerPosition(currPlayer.id);
     if (queuePosition === null || queuePosition !== assignment.queuePosition) {
-      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'The Codeforces queue is out of sync.' });
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'The problem queue is out of sync. Please refresh the page.' });
       return;
     }
 
@@ -1553,7 +1567,7 @@ io.on('connection', async (socket) => {
 
       // Validate BEFORE spending energy
       if (currPlayer.energy < cost) {
-        socket.emit('ability_failed', `Not enough energy. Need ${cost}, have ${currPlayer.energy}.`);
+        socket.emit('ability_failed', `Not enough energy! You need ${cost} but only have ${currPlayer.energy}.`);
         return;
       }
 
@@ -1561,11 +1575,11 @@ io.on('connection', async (socket) => {
       const targeted = enabledAbilities;
       if (targeted.includes(abilityType)) {
         if (!target) {
-          socket.emit('ability_failed', 'This ability requires a target.');
+          socket.emit('ability_failed', 'Please select a target for this ability.');
           return;
         }
         if (!room.map.withinMap(target)) {
-          socket.emit('ability_failed', 'Target is outside the map.');
+          socket.emit('ability_failed', 'Please select a target inside the battlefield.');
           return;
         }
       }
@@ -1597,7 +1611,7 @@ io.on('connection', async (socket) => {
         case AbilityType.Reinforce: {
           const block = room.map.getBlock(target!);
           if (!block || !block.player || block.player.id !== currPlayer.id) {
-            socket.emit('ability_failed', 'You must target your own territory.');
+            socket.emit('ability_failed', 'This ability can only be used on your own tiles.');
             return;
           }
           block.unit += 40;
@@ -1619,7 +1633,7 @@ io.on('connection', async (socket) => {
           }
           // Cannot target own tiles
           if (block.player && block.player.team === currPlayer.team) {
-            socket.emit('ability_failed', 'Cannot airstrike your own territory.');
+            socket.emit('ability_failed', 'You cannot use airstrike on your own tiles.');
             return;
           }
           currPlayer.energy -= cost;

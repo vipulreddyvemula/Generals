@@ -302,7 +302,7 @@ function GamingRoom() {
               ? 'Codeforces handle error'
               : 'Challenge error',
           status: 'error',
-          message: result.message || 'Unable to prepare commander challenges.',
+          message: result.message || 'Failed to get a commander challenge.',
           duration: 6000,
         });
       }
