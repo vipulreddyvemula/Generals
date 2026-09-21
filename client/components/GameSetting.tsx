@@ -21,6 +21,7 @@ import {
 import { pendingRoomSettingsKey, PendingRoomSettings } from './Lobby';
 import { BattlefieldBackdrop, PageFrame, Brand, Ornament } from './GeneralsUi';
 import { readPlayerProfile, savePlayerProfile } from '@/lib/player-profile';
+import { copyToClipboard } from '@/lib/utils';
 
 function SettingRow({ label, value }: { label: string; value: string }) {
   return (
@@ -73,8 +74,6 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
     } catch (e) {}
   };
 
-
-
   useEffect(() => {
     setNameDraft(room.roomName);
   }, [room.roomName]);
@@ -112,6 +111,13 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
     socketRef.current.emit('change_room_setting', property, value);
   };
 
+  useEffect(() => {
+    // If it's a sandbox room, we automatically start the game as soon as the player joins.
+    if (!room.gameStarted && room.isSandbox && socketRef.current?.connected) {
+      socketRef.current.emit('force_start');
+    }
+  }, [room.gameStarted, room.isSandbox, socketRef]);
+
   const leave = () => {
     if (leaving) return;
     setLeaving(true);
@@ -140,16 +146,21 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
   };
 
   const copyCode = async () => {
-    try {
-      await navigator.clipboard.writeText(room.id);
+    const success = await copyToClipboard(room.id);
+    if (success) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
-    } catch {
+    } else {
       setCopied(false);
     }
   };
 
-  if (me && me.team !== MaxTeamNum + 1 && (!me.codeforcesHandle || !me.codeforcesSolvedSetReady)) {
+  if (
+    me &&
+    me.team !== MaxTeamNum + 1 &&
+    !room.isSandbox &&
+    (!me.codeforcesHandle || !me.codeforcesSolvedSetReady)
+  ) {
     return (
       <PageFrame online={Boolean(socketRef.current?.connected)}>
         <BattlefieldBackdrop>
@@ -176,26 +187,44 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
                       value={newHandle}
                       onChange={(e) => setNewHandle(e.target.value)}
                       placeholder='Enter your Codeforces handle'
-                      disabled={Boolean(me.codeforcesHandle && !me.codeforcesSolvedSetReady)}
+                      disabled={Boolean(
+                        me.codeforcesHandle && !me.codeforcesSolvedSetReady
+                      )}
                     />
                   </label>
                 </div>
                 <button
                   className='g-button g-flow-submit'
-                  disabled={Boolean(!newHandle.trim() || (me.codeforcesHandle && !me.codeforcesSolvedSetReady))}
+                  disabled={Boolean(
+                    !newHandle.trim() ||
+                      (me.codeforcesHandle && !me.codeforcesSolvedSetReady)
+                  )}
                   onClick={submitNewHandle}
                   style={{ marginTop: '24px' }}
                 >
                   <AddIcon />
-                  {me.codeforcesHandle && !me.codeforcesSolvedSetReady ? 'Verifying...' : 'Submit & Verify'}
+                  {me.codeforcesHandle && !me.codeforcesSolvedSetReady
+                    ? 'Verifying...'
+                    : 'Submit & Verify'}
                   <ArrowForwardIcon className='g-button-arrow' />
                 </button>
                 {me.codeforcesHandle && !me.codeforcesSolvedSetReady ? (
-                  <p className='g-muted' style={{ marginTop: '16px', fontSize: '14px', textAlign: 'center' }}>
+                  <p
+                    className='g-muted'
+                    style={{
+                      marginTop: '16px',
+                      fontSize: '14px',
+                      textAlign: 'center',
+                    }}
+                  >
                     Please wait while we verify your Codeforces history...
                   </p>
                 ) : (
-                  <p className='g-error' role='alert' style={{ marginTop: '16px', textAlign: 'center' }}>
+                  <p
+                    className='g-error'
+                    role='alert'
+                    style={{ marginTop: '16px', textAlign: 'center' }}
+                  >
                     Invalid or missing Codeforces handle.
                   </p>
                 )}
@@ -222,11 +251,11 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
           <div className='g-room-code'>
             Room Code: <b>{room.id}</b>
             <button
-              className='g-button g-button-outline'
+              className={`g-button g-button-outline ${copied ? 'g-copied' : ''}`}
               onClick={copyCode}
               aria-label='Copy room code'
             >
-              <ContentCopyOutlinedIcon fontSize='small' />
+              {copied ? <CheckCircleOutlineIcon fontSize='small' /> : <ContentCopyOutlinedIcon fontSize='small' />}
             </button>
           </div>
           <p>
@@ -543,7 +572,12 @@ export default function GameSetting({ chat }: { chat?: ReactNode }) {
           <div>
             <button
               className={`g-button ${me?.forceStart ? 'g-button-outline' : 'g-button-ready'}`}
-              disabled={!me || me.team === MaxTeamNum + 1 || !me.codeforcesHandle || !me.codeforcesSolvedSetReady}
+              disabled={
+                !me ||
+                me.team === MaxTeamNum + 1 ||
+                !me.codeforcesHandle ||
+                !me.codeforcesSolvedSetReady
+              }
               onClick={() => socketRef.current?.emit('force_start')}
             >
               <CheckCircleOutlineIcon />

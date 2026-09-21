@@ -13,10 +13,17 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import SendRoundedIcon from '@mui/icons-material/SendRounded';
 import { useTranslation } from 'next-i18next';
 import { Socket } from 'socket.io-client';
+import { Resizable } from 're-resizable';
 import { Message } from '@/lib/types';
 import { ColorArr } from '@/lib/constants';
 
-function ChatMessage({ message, embedded = false }: { message: Message; embedded?: boolean }) {
+function ChatMessage({
+  message,
+  embedded = false,
+}: {
+  message: Message;
+  embedded?: boolean;
+}) {
   return (
     <Typography
       component='div'
@@ -67,7 +74,10 @@ export default React.memo(function ChatBox({
   const endRef = useRef<HTMLDivElement>(null);
   const { t } = useTranslation();
 
-  useEffect(() => setOpen((prev) => prev || !compact || embedded), [compact, embedded]);
+  useEffect(
+    () => setOpen((prev) => prev || !compact || embedded),
+    [compact, embedded]
+  );
   useEffect(() => {
     if (open) {
       setLastReadCount(messages.length);
@@ -86,7 +96,12 @@ export default React.memo(function ChatBox({
       )
         return;
       const target = event.target as HTMLElement | null;
-      if (target?.closest('input, textarea, button, a, select, [role="button"], [contenteditable="true"]')) return;
+      if (
+        target?.closest(
+          'input, textarea, button, a, select, [role="button"], [contenteditable="true"]'
+        )
+      )
+        return;
       event.preventDefault();
       setOpen(true);
       window.setTimeout(() => inputRef.current?.focus(), 0);
@@ -133,23 +148,27 @@ export default React.memo(function ChatBox({
     );
   }
 
-  return (
+  const chatContent = (
     <Paper
+      data-tutorial='chat'
       elevation={0}
       sx={{
-        left: compact ? 16 : embedded ? 'auto' : 0,
-        bottom: compact ? 16 : embedded ? 'auto' : 0,
-        zIndex: 1200,
-        width: embedded ? '100%' : compact ? 420 : 350,
-        height: embedded ? '100%' : compact ? 480 : '40vh',
+        width: '100%',
+        height: '100%',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
         borderRadius: embedded ? '7px' : compact ? '12px' : '0 24px 0 0',
-        bgcolor: embedded ? 'rgba(9,25,37,.9)' : compact ? 'rgba(7,16,28,.96)' : '#212936',
-        border: embedded ? '1px solid rgba(104,148,171,.34)' : compact ? '1px solid rgba(217,183,101,.38)' : 'none',
-        position: embedded ? 'relative' : 'fixed',
-        boxShadow: '0 12px 38px rgba(0,0,0,.55)',
+        bgcolor: embedded
+          ? 'rgba(9,25,37,.9)'
+          : compact
+            ? 'rgba(7,16,28,.96)'
+            : '#212936',
+        border: embedded
+          ? '1px solid rgba(104,148,171,.34)'
+          : compact
+            ? '1px solid rgba(217,183,101,.38)'
+            : 'none',
         backdropFilter: 'blur(10px)',
       }}
     >
@@ -168,7 +187,7 @@ export default React.memo(function ChatBox({
             fontSize: embedded ? 15 : 15,
             letterSpacing: 1.6,
             fontWeight: 900,
-          color: embedded ? '#eef4f6' : '#d9b765',
+            color: embedded ? '#eef4f6' : '#d9b765',
           }}
         >
           {embedded ? 'ROOM CHAT' : 'SQUAD COMMS'}
@@ -214,7 +233,14 @@ export default React.memo(function ChatBox({
       {socket && (
         <>
           <Divider sx={{ borderColor: 'rgba(255,255,255,.08)' }} />
-          <Box sx={{ display: 'flex', alignItems: 'center', p: embedded ? 1.5 : 1, gap: .7 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              p: embedded ? 1.5 : 1,
+              gap: 0.7,
+            }}
+          >
             <InputBase
               inputRef={inputRef}
               value={inputValue}
@@ -236,10 +262,81 @@ export default React.memo(function ChatBox({
                 borderRadius: '5px',
               }}
             />
-            <IconButton aria-label='Send message' disabled={!inputValue.trim()} onClick={sendMessage} sx={{ bgcolor: '#2868d8', borderRadius: '5px', color: '#fff', '&:hover': { bgcolor: '#347cf3' } }}><SendRoundedIcon fontSize='small' /></IconButton>
+            <IconButton
+              aria-label='Send message'
+              disabled={!inputValue.trim()}
+              onClick={sendMessage}
+              sx={{
+                bgcolor: '#2868d8',
+                borderRadius: '5px',
+                color: '#fff',
+                '&:hover': { bgcolor: '#347cf3' },
+              }}
+            >
+              <SendRoundedIcon fontSize='small' />
+            </IconButton>
           </Box>
         </>
       )}
     </Paper>
+  );
+
+  if (!compact && !embedded) {
+    return (
+      <Box
+        sx={{
+          position: 'fixed',
+          left: 0,
+          bottom: 0,
+          zIndex: 1200,
+          width: 350,
+          height: '40vh',
+          boxShadow: '0 12px 38px rgba(0,0,0,.55)',
+        }}
+      >
+        {chatContent}
+      </Box>
+    );
+  }
+
+  if (embedded) {
+    return (
+      <Box sx={{ width: '100%', height: '100%', position: 'relative' }}>
+        {chatContent}
+      </Box>
+    );
+  }
+
+  return (
+    <Resizable
+      defaultSize={{
+        width: 300,
+        height: 380,
+      }}
+      minWidth={200}
+      minHeight={250}
+      maxWidth="80vw"
+      maxHeight="80vh"
+      style={{
+        position: 'fixed',
+        left: 16,
+        bottom: 16,
+        zIndex: 1200,
+        boxShadow: '0 12px 38px rgba(0,0,0,.55)',
+        borderRadius: '12px',
+      }}
+      enable={{
+        top: true,
+        right: true,
+        bottom: true,
+        left: true,
+        topRight: true,
+        bottomRight: true,
+        bottomLeft: true,
+        topLeft: true,
+      }}
+    >
+      {chatContent}
+    </Resizable>
   );
 });

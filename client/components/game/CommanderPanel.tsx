@@ -90,7 +90,7 @@ const abilities = [
     type: AbilityType.Scout,
     icon: <RadarIcon />,
     accent: '#2fe6a6',
-    effect: 'Reveals area (5x5)',
+    effect: 'Reveals area (7x7)',
   },
   {
     type: AbilityType.Reinforce,
@@ -558,7 +558,7 @@ export default function CommanderPanel() {
               sx={{ fontSize: 10, color: 'rgba(231,242,252,.45)' }}
             >
               {' '}
-              / {commanderConfig?.maxEnergy || 100}
+              / {room?.isSandbox ? 1000 : commanderConfig?.maxEnergy || 100}
             </Box>
           </Typography>
         </Box>
@@ -566,7 +566,9 @@ export default function CommanderPanel() {
           variant='determinate'
           value={Math.min(
             100,
-            (energy / (commanderConfig?.maxEnergy || 100)) * 100
+            (energy /
+              (room?.isSandbox ? 1000 : commanderConfig?.maxEnergy || 100)) *
+              100
           )}
           sx={{
             height: 11,
@@ -583,7 +585,12 @@ export default function CommanderPanel() {
 
       <Tabs
         value={activeTab}
-        onChange={(_, newValue) => setActiveTab(newValue)}
+        onChange={(_, newValue) => {
+          setActiveTab(newValue);
+          if (room?.isSandbox && newValue === 'ABILITIES') {
+            window.dispatchEvent(new CustomEvent('tutorial-abilities-opened'));
+          }
+        }}
         variant='fullWidth'
         sx={{
           minHeight: 42,
@@ -614,6 +621,7 @@ export default function CommanderPanel() {
           value='CHALLENGES'
         />
         <Tab
+          data-tutorial='abilities-tab'
           icon={<GavelOutlinedIcon sx={{ fontSize: 17 }} />}
           iconPosition='start'
           label='ABILITIES'
@@ -623,7 +631,10 @@ export default function CommanderPanel() {
 
       {activeTab === 'CHALLENGES' && (
         <>
-          <Box sx={{ ...cardSx, borderColor: 'rgba(70,124,216,.52)' }}>
+          <Box
+            data-tutorial='math-card'
+            sx={{ ...cardSx, borderColor: 'rgba(70,124,216,.52)' }}
+          >
             <Box
               sx={{
                 display: 'flex',
@@ -684,6 +695,7 @@ export default function CommanderPanel() {
                     }}
                   />
                   <Button
+                    className='tutorial-math-submit-btn'
                     type='submit'
                     disabled={!mathAnswer.trim()}
                     sx={{
@@ -706,6 +718,8 @@ export default function CommanderPanel() {
                   Request a tactical question to solve in-game.
                 </Typography>
                 <Button
+                  data-tutorial='math-request'
+                  className='tutorial-math-btn'
                   onClick={requestMath}
                   disabled={mathCooldown}
                   sx={{
@@ -981,6 +995,8 @@ export default function CommanderPanel() {
             const selected = activeAbility === ability.type;
             return (
               <Button
+                data-tutorial={`${ability.type.toLowerCase()}-ability`}
+                className={`tutorial-ability-${ability.type.toLowerCase()}`}
                 key={ability.type}
                 onClick={
                   affordable ? () => activateAbility(ability.type) : undefined

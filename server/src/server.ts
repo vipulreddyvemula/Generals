@@ -14,6 +14,7 @@ import { canJoinRoom } from './lib/event-limits';
 import { resetRoomRuntime, runRoomTick, startRoomOnce } from './lib/room-runtime';
 import { eventMetrics } from './lib/observability';
 import { SESSION_CLAIM_POLICY, SESSION_IP_POLICY, SOCKET_EVENT_POLICIES, SocketRateLimiter } from './lib/socket-rate-limit';
+import { addDummyBotToRoom } from './lib/dummy-bot';
 
 // HTTP-layer rate-limit policy for /create_room (per remote IP).
 const CREATE_ROOM_HTTP_POLICY = { burst: 5, refillMs: 60_000 };
@@ -26,6 +27,7 @@ import {
   AbilityType,
   ABILITY_COSTS,
   CodeforcesChallengeState,
+  TileType,
 } from './lib/types';
 import { getPlayerIndex, getPlayerIndexBySocket } from './lib/utils';
 import Point from './lib/point';
@@ -98,6 +100,32 @@ app.get('/create_room', async (req: Request, res: Response) => {
   }
   const result = await createRoom();
   if (result.success) {
+    res.status(200).json(result);
+  } else {
+    res.status(500).json(result);
+  }
+});
+
+app.get('/create_sandbox', async (req: Request, res: Response) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  if (!httpRateLimiter.allow(`http:${ip}`, 'create_room', CREATE_ROOM_HTTP_POLICY)) {
+    res.status(429).json({ success: false, message: 'Too many room creation requests. Please wait.' });
+    return;
+  }
+  const result = await createRoom(undefined, 'Tutorial Sandbox');
+  if (result.success && result.roomId) {
+    const room = roomPool[result.roomId];
+    if (room) {
+      room.isSandbox = true;
+      room.mapWidth = 0.5;
+      room.mapHeight = 0.5;
+      room.mountain = 0;
+      room.city = 0;
+      room.swamp = 0;
+      room.revealKing = true;
+      room.keepAlive = true;
+      addDummyBotToRoom(room);
+    }
     res.status(200).json(result);
   } else {
     res.status(500).json(result);
@@ -404,7 +432,13 @@ function handleDisconnectInRoom(room: Room, player: Player, socketId: string, io
 
 async function checkForcedStart(room: Room, io: Server) {
   const activePlayers = room.players.filter((player) => !player.spectating());
-  const forceStartNum = forceStartOK[activePlayers.length];
+  let forceStartNum = forceStartOK[activePlayers.length];
+
+  if (room.isSandbox) {
+    // In sandbox, the dummy bot doesn't send 'force_start'.
+    // We only need the single human player to start.
+    forceStartNum = 1;
+  }
 
   if (!room.gameStarted && room.forceStartNum >= forceStartNum) {
     // P6: Require at least two distinct teams among active players.
@@ -418,10 +452,8 @@ async function checkForcedStart(room: Room, io: Server) {
       return;
     }
 
-    const missingHandles = activePlayers.filter(
-      (player) => !player.codeforcesHandle || !player.codeforcesSolvedSetReady
-    );
-    if (missingHandles.length > 0) {
+    const missingHandles = activePlayers.filter((player) => !player.codeforcesHandle || !player.codeforcesSolvedSetReady);
+    if (!room.isSandbox && missingHandles.length > 0) {
       io.in(room.id).emit(
         'error',
         'Match cannot start',
@@ -464,6 +496,32 @@ function handleGame(room: Room, io: Server): void {
     );
     room.map.generate();
     room.mapGenerated = true;
+
+    if (room.isSandbox) {
+      for (const player of room.players) {
+        if (!player.king) continue;
+        const oldKing = room.map.getBlock(player.king);
+        player.loseLand(oldKing);
+        oldKing.beNeutralized();
+        oldKing.setType(TileType.Plain);
+        oldKing.setUnit(0);
+        oldKing.isAlwaysRevealed = false;
+        player.king = null;
+      }
+      const placements = room.players.map((player) => ({
+        player,
+        point: player.username === 'Practice Opponent' ? new Point(2, room.map!.height - 3) : new Point(room.map!.width - 3, 2),
+        units: player.username === 'Practice Opponent' ? 5 : 50,
+      }));
+      for (const { player, point, units } of placements) {
+        const block = room.map.getBlock(point);
+        block.initKing(player);
+        block.isAlwaysRevealed = true;
+        player.initKing(block);
+        block.setUnit(units);
+      }
+    }
+
     const gameMap = room.map;
     if (!gameMap) throw new Error('Game map was not initialized');
     const globalMapDiff = new MapDiff();
@@ -473,6 +531,11 @@ function handleGame(room: Room, io: Server): void {
 
     console.info(`Start game`);
     room.gameStarted = true;
+    if (room.isSandbox) {
+      room.players.forEach((p) => {
+        p.energy = 1000;
+      });
+    }
     const intro_message = 'Chat is being recorded. Have fun!';
     gameRecord.addMessage({ turn: gameMap.turn, player: null, content: intro_message });
     io.in(room.id).emit('update_room', room);
@@ -578,11 +641,19 @@ function handleGame(room: Room, io: Server): void {
         await globalMapDiff.patch(gameMap.map);
         if (!isCurrent()) return;
         gameRecord.addGameUpdate(globalMapDiff.data, gameMap.turn, leaderBoardData);
-        gameMap.updateTurn();
+        const appliedEffects = gameMap.updateTurn();
+        for (const effect of appliedEffects) {
+          const effectSocket = io.sockets.sockets.get(effect.player.socket_id);
+          effectSocket?.emit('ability_effect_applied', {
+            abilityType: effect.type,
+            target: { x: effect.center.x, y: effect.center.y },
+            turn: gameMap.turn,
+          });
+        }
         gameMap.updateUnit();
 
         const outcome = getGameOutcome(room);
-        if (outcome.terminal) finishGame(room, io, gameRecord);
+        if (outcome.terminal && !room.isSandbox) finishGame(room, io, gameRecord);
       }).catch((error) => {
         eventMetrics.exceptions += 1;
         console.error('Room tick failed:', room.id, error);
@@ -883,12 +954,12 @@ io.on('connection', async (socket) => {
     if (room.gameStarted) return;
     const player = resolveSocketPlayer(room, socket.id);
     if (!player || player.spectating()) return;
-    
+
     player.codeforcesHandle = String(handle || '').trim();
     player.codeforcesSolvedSetReady = false;
     player.codeforcesHistoryLoading = false;
     player.codeforcesSolvedSet = new Set<string>();
-    
+
     io.in(room.id).emit('update_room', room);
     if (player.codeforcesHandle) {
       void prepareCodeforcesHistory(room, player, io);
@@ -973,7 +1044,7 @@ io.on('connection', async (socket) => {
 
           actingPlayer.operatedTurn = gameMap.turn;
           actingPlayer.lastMoveTurn = gameMap.turn;
-          socket.emit('attack_success', from, to, gameMap.turn);
+          socket.emit('attack_success', from, to, gameMap.turn, isHalf);
         } else {
           socket.emit(
             'attack_failure',
@@ -1005,6 +1076,15 @@ io.on('connection', async (socket) => {
       },
       abilities: COMMANDER_CONFIG.abilities,
     });
+  });
+
+  socket.on('tutorial_complete', () => {
+    if (!room.isSandbox || !room.gameStarted) return;
+    const currPlayer = room.players.find((candidate) => candidate.socket_id === socket.id);
+    if (!currPlayer || currPlayer.isDead || currPlayer.spectating()) return;
+    currPlayer.energy = 1000;
+    socket.emit('energy_update', { energy: currPlayer.energy });
+    io.in(room.id).emit('update_room', room);
   });
 
   socket.on('get_codeforces_queue_status', () => {
@@ -1091,7 +1171,8 @@ io.on('connection', async (socket) => {
       const rewardTroops = currPlayer.activeChallenge.rewardTroops;
 
       if (MathGenerator.verifyAnswer(currPlayer.activeChallenge, answer)) {
-        currPlayer.energy = addCommanderEnergy(currPlayer.energy, rewardEnergy);
+        const maxEnergyOverride = room.isSandbox ? 1000 : undefined;
+        currPlayer.energy = addCommanderEnergy(currPlayer.energy, rewardEnergy, maxEnergyOverride);
         if (currPlayer.king) room.map.getBlock(currPlayer.king).unit += rewardTroops;
         currPlayer.activeChallenge = null;
         currPlayer.challengeCooldownUntilTurn = room.map.turn + COMMANDER_CONFIG.math.cooldownTurns;
@@ -1342,7 +1423,8 @@ io.on('connection', async (socket) => {
         const solvedKey = `${liveAssignment.contestId}-${liveAssignment.problemIndex}`;
         livePlayer.codeforcesSolvedSet.add(solvedKey);
         codeforcesApiQueue.markProblemSolved(livePlayer.codeforcesHandle, solvedKey);
-        livePlayer.energy = addCommanderEnergy(livePlayer.energy, liveAssignment.rewardEnergy);
+        const maxEnergyOverride = liveRoom.isSandbox ? 1000 : undefined;
+        livePlayer.energy = addCommanderEnergy(livePlayer.energy, liveAssignment.rewardEnergy, maxEnergyOverride);
         if (livePlayer.king) liveRoom.map.getBlock(livePlayer.king).unit += liveAssignment.rewardTroops;
         livePlayer.operatedTurn = liveRoom.map.turn;
         const nextQueuePosition = liveRoom.codeforcesQueue.advancePlayer(livePlayer.id);
@@ -1427,7 +1509,11 @@ io.on('connection', async (socket) => {
             radius: 3,
             expiresAtTurn: room.map.turn + 10,
           });
-          socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
+          socket.emit('ability_activated', {
+            abilityType,
+            energy: currPlayer.energy,
+            target,
+          });
           // Broadcast map update so both clients see the same game state
           io.in(room.id).emit('update_room', room);
           break;
@@ -1440,7 +1526,11 @@ io.on('connection', async (socket) => {
           }
           block.unit += 40;
           currPlayer.energy -= cost;
-          socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
+          socket.emit('ability_activated', {
+            abilityType,
+            energy: currPlayer.energy,
+            target,
+          });
           io.in(room.id).emit('update_room', room);
           break;
         }
@@ -1464,7 +1554,11 @@ io.on('connection', async (socket) => {
             radius: 1, // Airstrike hits a 3x3 area (radius 1)
             expiresAtTurn: room.map.turn + 6, // ~3 seconds delay before impact
           });
-          socket.emit('ability_activated', { abilityType, energy: currPlayer.energy });
+          socket.emit('ability_activated', {
+            abilityType,
+            energy: currPlayer.energy,
+            target,
+          });
           io.in(room.id).emit('update_room', room);
           break;
         }

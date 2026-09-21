@@ -34,6 +34,6 @@ export const COMMANDER_CONFIG = {
   },
 } as const;
 
-export function addCommanderEnergy(current: number, reward: number): number {
-  return Math.min(COMMANDER_CONFIG.maxEnergy, Math.max(0, current) + Math.max(0, reward));
+export function addCommanderEnergy(current: number, reward: number, maxEnergyOverride?: number): number {
+  return Math.min(maxEnergyOverride ?? COMMANDER_CONFIG.maxEnergy, Math.max(0, current) + Math.max(0, reward));
 }

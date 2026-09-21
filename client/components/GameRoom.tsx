@@ -62,18 +62,33 @@ function GamingRoom() {
   } = useGameDispatch();
 
   useEffect(() => {
+    if (!router.isReady) return;
     let tmp: string | null = localStorage.getItem('username');
     if (!tmp) {
-      router.push('/player-details');
+      if (router.query.tutorial === 'true') {
+        setMyUserName('Trainee');
+      } else {
+        void router.replace(
+          `/player-details?next=${encodeURIComponent(router.asPath)}`
+        );
+      }
     } else {
       setMyUserName(tmp);
     }
-  }, [setMyPlayerId, setMyUserName, router]);
+  }, [
+    router,
+    router.asPath,
+    router.isReady,
+    router.query.tutorial,
+    setMyUserName,
+  ]);
 
   useEffect(() => {
     // Game Logic Init
     if (!roomId) return;
-    const usernameFromStorage = localStorage.getItem('username') || myUserName;
+    const usernameFromStorage =
+      localStorage.getItem('username') ||
+      (router.query.tutorial === 'true' ? 'Trainee' : myUserName);
     if (!usernameFromStorage) return;
 
     class AttackQueue {
@@ -228,12 +243,16 @@ function GamingRoom() {
       setDialogContent([[null], '', null]);
       setOpenOverDialog(false);
 
-      setSelectedMapTileInfo({
-        x: initGameInfo.king.x,
-        y: initGameInfo.king.y,
-        half: false,
-        unitsCount: 0,
-      });
+      setSelectedMapTileInfo(
+        router.query.tutorial === 'true'
+          ? { x: -1, y: -1, half: false, unitsCount: 0 }
+          : {
+              x: initGameInfo.king.x,
+              y: initGameInfo.king.y,
+              half: false,
+              unitsCount: 0,
+            }
+      );
 
       mapDataDispatch({
         type: 'init',

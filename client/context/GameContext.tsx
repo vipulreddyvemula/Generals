@@ -11,7 +11,7 @@ import {
   TileType,
   UserData,
   initGameInfo,
-  AbilityType
+  AbilityType,
 } from '@/lib/types';
 import React, {
   MutableRefObject,
@@ -74,17 +74,26 @@ interface GameDispatch {
   >;
   setInitGameInfo: React.Dispatch<any>;
   setActiveAbility: React.Dispatch<React.SetStateAction<AbilityType | null>>;
-  attackUp: (info: SelectedMapTileInfo) => void
-  attackDown: (info: SelectedMapTileInfo) => void
-  attackLeft: (info: SelectedMapTileInfo) => void
-  attackRight: (info: SelectedMapTileInfo) => void
-  handlePositionChange: (selectPos: SelectedMapTileInfo, newPoint: Position, className: string) => void
-  testIfNextPossibleMove: (tileType: TileType, x: number, y: number) => boolean
-  handleClick: (tile: TileProp, x: number, y: number, myPlayerIndex: number) => void
-  halfArmy: (touchHalf: MutableRefObject<boolean>) => void
-  clearQueue: () => void
-  popQueue: () => void
-  selectGeneral: () => void
+  attackUp: (info: SelectedMapTileInfo) => void;
+  attackDown: (info: SelectedMapTileInfo) => void;
+  attackLeft: (info: SelectedMapTileInfo) => void;
+  attackRight: (info: SelectedMapTileInfo) => void;
+  handlePositionChange: (
+    selectPos: SelectedMapTileInfo,
+    newPoint: Position,
+    className: string
+  ) => void;
+  testIfNextPossibleMove: (tileType: TileType, x: number, y: number) => boolean;
+  handleClick: (
+    tile: TileProp,
+    x: number,
+    y: number,
+    myPlayerIndex: number
+  ) => void;
+  halfArmy: (touchHalf: MutableRefObject<boolean>) => void;
+  clearQueue: () => void;
+  popQueue: () => void;
+  selectGeneral: () => void;
 }
 
 const GameContext = createContext<GameContext | undefined>(undefined);
@@ -134,28 +143,31 @@ const GameProvider: React.FC<GameProviderProp> = ({ children }) => {
     });
   const [activeAbility, setActiveAbility] = useState<AbilityType | null>(null);
 
-  const halfArmy = useCallback((touchHalf: MutableRefObject<boolean>) => {
-    if (selectedMapTileInfo) {
-      let selectPos = selectedMapTileInfo;
-      if (selectPos.x === -1 || selectPos.y === -1) return;
-      touchHalf.current = !touchHalf.current; // todo: potential bug
-      const newInfo = {
-        x: selectPos.x,
-        y: selectPos.y,
-        half: touchHalf.current,
-        unitsCount: 0,
-      };
-      syncSelectedTileRef.current = newInfo;
-      setSelectedMapTileInfo(newInfo);
-      mapQueueDataDispatch({
-        type: 'change',
-        x: selectPos.x,
-        y: selectPos.y,
-        className: '',
-        half: touchHalf.current,
-      });
-    }
-  }, [mapQueueDataDispatch, selectedMapTileInfo, setSelectedMapTileInfo]);
+  const halfArmy = useCallback(
+    (touchHalf: MutableRefObject<boolean>) => {
+      if (selectedMapTileInfo) {
+        let selectPos = selectedMapTileInfo;
+        if (selectPos.x === -1 || selectPos.y === -1) return;
+        touchHalf.current = !touchHalf.current; // todo: potential bug
+        const newInfo = {
+          x: selectPos.x,
+          y: selectPos.y,
+          half: touchHalf.current,
+          unitsCount: 0,
+        };
+        syncSelectedTileRef.current = newInfo;
+        setSelectedMapTileInfo(newInfo);
+        mapQueueDataDispatch({
+          type: 'change',
+          x: selectPos.x,
+          y: selectPos.y,
+          className: '',
+          half: touchHalf.current,
+        });
+      }
+    },
+    [mapQueueDataDispatch, selectedMapTileInfo, setSelectedMapTileInfo]
+  );
 
   const selectGeneral = useCallback(() => {
     if (initGameInfo && selectedMapTileInfo) {
@@ -200,25 +212,43 @@ const GameProvider: React.FC<GameProviderProp> = ({ children }) => {
   const possibleNextMapPositions = usePossibleNextMapPositions({
     width: room.map ? room.map.width : 0,
     height: room.map ? room.map.height : 0,
-    selectedMapTileInfo: selectedMapTileInfo ? { x: selectedMapTileInfo.x, y: selectedMapTileInfo.y } : undefined,
+    selectedMapTileInfo: selectedMapTileInfo
+      ? { x: selectedMapTileInfo.x, y: selectedMapTileInfo.y }
+      : undefined,
   });
 
-  const testIfNextPossibleMoveInternal = useCallback((tileType: TileType, x: number, y: number, basePos: SelectedMapTileInfo) => {
-    if (tileType === TileType.Mountain) return false;
-    if (!basePos || basePos.x === -1 || basePos.y === -1) return false;
-    
-    return (
-      (basePos.x === x && basePos.y - 1 === y) ||
-      (basePos.x === x && basePos.y + 1 === y) ||
-      (basePos.x - 1 === x && basePos.y === y) ||
-      (basePos.x + 1 === x && basePos.y === y)
-    );
-  }, []);
+  const testIfNextPossibleMoveInternal = useCallback(
+    (
+      tileType: TileType,
+      x: number,
+      y: number,
+      basePos: SelectedMapTileInfo
+    ) => {
+      if (tileType === TileType.Mountain) return false;
+      if (!basePos || basePos.x === -1 || basePos.y === -1) return false;
 
-  const testIfNextPossibleMove = useCallback((tileType: TileType, x: number, y: number) => {
-    if (!selectedMapTileInfo) return false;
-    return testIfNextPossibleMoveInternal(tileType, x, y, selectedMapTileInfo);
-  }, [selectedMapTileInfo, testIfNextPossibleMoveInternal]);
+      return (
+        (basePos.x === x && basePos.y - 1 === y) ||
+        (basePos.x === x && basePos.y + 1 === y) ||
+        (basePos.x - 1 === x && basePos.y === y) ||
+        (basePos.x + 1 === x && basePos.y === y)
+      );
+    },
+    []
+  );
+
+  const testIfNextPossibleMove = useCallback(
+    (tileType: TileType, x: number, y: number) => {
+      if (!selectedMapTileInfo) return false;
+      return testIfNextPossibleMoveInternal(
+        tileType,
+        x,
+        y,
+        selectedMapTileInfo
+      );
+    },
+    [selectedMapTileInfo, testIfNextPossibleMoveInternal]
+  );
 
   const withinMap = useCallback(
     (point: Position) => {
@@ -257,126 +287,150 @@ const GameProvider: React.FC<GameProviderProp> = ({ children }) => {
           className: className,
         });
       } else {
-        console.log("new point not within map", newPoint)
+        console.log('new point not within map', newPoint);
+      }
+    },
+    [withinMap, attackQueueRef, mapQueueDataDispatch, setSelectedMapTileInfo]
+  );
+
+  const handleClick = useCallback(
+    (tile: TileProp, x: number, y: number, myPlayerIndex: number) => {
+      if (activeAbility) {
+        socketRef.current.emit('activate_ability', activeAbility, { x, y });
+        setActiveAbility(null);
+        return;
+      }
+      const [tileType, color, unitsCount] = tile;
+      const isOwned =
+        myPlayerIndex !== -1 && room.players[myPlayerIndex]
+          ? color === room.players[myPlayerIndex].color
+          : false;
+
+      const truePos = syncSelectedTileRef.current || selectedMapTileInfo;
+      const isNextPossibleMove = testIfNextPossibleMoveInternal(
+        tileType,
+        x,
+        y,
+        truePos
+      );
+      let tileHalf = false;
+
+      if (truePos.x === x && truePos.y === y) {
+        tileHalf = truePos.half;
+      } else if (mapQueueData.length !== 0 && mapQueueData[x][y].half) {
+        tileHalf = true;
+      } else {
+        tileHalf = false;
+      }
+
+      const getPossibleMoveDirection = () => {
+        if (isNextPossibleMove) {
+          if (truePos.x - 1 === x && truePos.y === y) return 'up';
+          if (truePos.x + 1 === x && truePos.y === y) return 'down';
+          if (truePos.x === x && truePos.y - 1 === y) return 'left';
+          if (truePos.x === x && truePos.y + 1 === y) return 'right';
+        }
+        return '';
+      };
+      const moveDirection = getPossibleMoveDirection();
+
+      if (isNextPossibleMove) {
+        handlePositionChange(truePos, { x, y }, `queue_${moveDirection}`);
+      } else if (isOwned) {
+        if (truePos.x === x && truePos.y === y) {
+          console.log(
+            'Clicked on the current tile, changing tile half state to',
+            !tileHalf
+          );
+          const newInfo = {
+            x,
+            y,
+            half: !tileHalf,
+            unitsCount: unitsCount,
+          };
+          syncSelectedTileRef.current = newInfo;
+          setSelectedMapTileInfo(newInfo);
+        } else {
+          const newInfo = { x, y, half: false, unitsCount: unitsCount };
+          syncSelectedTileRef.current = newInfo;
+          setSelectedMapTileInfo(newInfo);
+        }
+      } else {
+        const newInfo = { x: -1, y: -1, half: false, unitsCount: 0 };
+        syncSelectedTileRef.current = newInfo;
+        setSelectedMapTileInfo(newInfo);
+        mapQueueDataDispatch({
+          type: 'change',
+          x: x,
+          y: y,
+          className: '',
+          half: false,
+        });
       }
     },
     [
-      withinMap,
-      attackQueueRef,
-      mapQueueDataDispatch,
+      selectedMapTileInfo,
+      mapQueueData,
+      possibleNextMapPositions,
+      handlePositionChange,
+      activeAbility,
       setSelectedMapTileInfo,
+      mapQueueDataDispatch,
     ]
   );
 
-  const handleClick = useCallback((tile: TileProp, x: number, y: number, myPlayerIndex: number) => {
-    if (activeAbility) {
-      socketRef.current.emit('activate_ability', activeAbility, { x, y });
-      setActiveAbility(null);
-      return;
-    }
-    const [tileType, color, unitsCount] = tile;
-    const isOwned = myPlayerIndex !== -1 && room.players[myPlayerIndex] ? color === room.players[myPlayerIndex].color : false;
-
-    const truePos = syncSelectedTileRef.current || selectedMapTileInfo;
-    const isNextPossibleMove = testIfNextPossibleMoveInternal(tileType, x, y, truePos);
-    let tileHalf = false;
-
-    if (truePos.x === x && truePos.y === y) {
-      tileHalf = truePos.half;
-    } else if (mapQueueData.length !== 0 && mapQueueData[x][y].half) {
-      tileHalf = true;
-    } else {
-      tileHalf = false;
-    }
-
-
-    const getPossibleMoveDirection = () => {
-      if (isNextPossibleMove) {
-        if (truePos.x - 1 === x && truePos.y === y) return 'up';
-        if (truePos.x + 1 === x && truePos.y === y) return 'down';
-        if (truePos.x === x && truePos.y - 1 === y) return 'left';
-        if (truePos.x === x && truePos.y + 1 === y) return 'right';
-      }
-      return '';
-    };
-    const moveDirection = getPossibleMoveDirection();
-
-    if (isNextPossibleMove) {
-      handlePositionChange(truePos, { x, y }, `queue_${moveDirection}`);
-    } else if (isOwned) {
-      if (truePos.x === x && truePos.y === y) {
-        console.log(
-          'Clicked on the current tile, changing tile half state to',
-          !tileHalf
-        );
-        const newInfo = {
-          x,
-          y,
-          half: !tileHalf,
-          unitsCount: unitsCount,
+  const attackUp = useCallback(
+    (selectPos?: SelectedMapTileInfo) => {
+      const truePos = syncSelectedTileRef.current || selectPos;
+      if (truePos) {
+        let newPoint = {
+          x: truePos.x - 1,
+          y: truePos.y,
         };
-        syncSelectedTileRef.current = newInfo;
-        setSelectedMapTileInfo(newInfo);
-      } else {
-        const newInfo = { x, y, half: false, unitsCount: unitsCount };
-        syncSelectedTileRef.current = newInfo;
-        setSelectedMapTileInfo(newInfo);
+        handlePositionChange(truePos, newPoint, 'queue_up');
       }
-    } else {
-      const newInfo = { x: -1, y: -1, half: false, unitsCount: 0 };
-      syncSelectedTileRef.current = newInfo;
-      setSelectedMapTileInfo(newInfo);
-      mapQueueDataDispatch({
-        type: 'change',
-        x: x,
-        y: y,
-        className: '',
-        half: false,
-      });
-    }
-  }, [selectedMapTileInfo, mapQueueData, possibleNextMapPositions, handlePositionChange, activeAbility, setSelectedMapTileInfo, mapQueueDataDispatch]);
-
-  const attackUp = useCallback((selectPos?: SelectedMapTileInfo) => {
-    const truePos = syncSelectedTileRef.current || selectPos;
-    if (truePos) {
-      let newPoint = {
-        x: truePos.x - 1,
-        y: truePos.y,
-      };
-      handlePositionChange(truePos, newPoint, 'queue_up');
-    }
-  }, [handlePositionChange]);
-  const attackDown = useCallback((selectPos?: SelectedMapTileInfo) => {
-    const truePos = syncSelectedTileRef.current || selectPos;
-    if (truePos) {
-      let newPoint = {
-        x: truePos.x + 1,
-        y: truePos.y,
-      };
-      handlePositionChange(truePos, newPoint, 'queue_down');
-    }
-  }, [handlePositionChange]);
-  const attackLeft = useCallback((selectPos?: SelectedMapTileInfo) => {
-    const truePos = syncSelectedTileRef.current || selectPos;
-    if (truePos) {
-      let newPoint = {
-        x: truePos.x,
-        y: truePos.y - 1,
-      };
-      handlePositionChange(truePos, newPoint, 'queue_left');
-    }
-  }, [handlePositionChange]);
-  const attackRight = useCallback((selectPos?: SelectedMapTileInfo) => {
-    const truePos = syncSelectedTileRef.current || selectPos;
-    if (truePos) {
-      let newPoint = {
-        x: truePos.x,
-        y: truePos.y + 1,
-      };
-      handlePositionChange(truePos, newPoint, 'queue_right');
-    }
-  }, [handlePositionChange]);
-
+    },
+    [handlePositionChange]
+  );
+  const attackDown = useCallback(
+    (selectPos?: SelectedMapTileInfo) => {
+      const truePos = syncSelectedTileRef.current || selectPos;
+      if (truePos) {
+        let newPoint = {
+          x: truePos.x + 1,
+          y: truePos.y,
+        };
+        handlePositionChange(truePos, newPoint, 'queue_down');
+      }
+    },
+    [handlePositionChange]
+  );
+  const attackLeft = useCallback(
+    (selectPos?: SelectedMapTileInfo) => {
+      const truePos = syncSelectedTileRef.current || selectPos;
+      if (truePos) {
+        let newPoint = {
+          x: truePos.x,
+          y: truePos.y - 1,
+        };
+        handlePositionChange(truePos, newPoint, 'queue_left');
+      }
+    },
+    [handlePositionChange]
+  );
+  const attackRight = useCallback(
+    (selectPos?: SelectedMapTileInfo) => {
+      const truePos = syncSelectedTileRef.current || selectPos;
+      if (truePos) {
+        let newPoint = {
+          x: truePos.x,
+          y: truePos.y + 1,
+        };
+        handlePositionChange(truePos, newPoint, 'queue_right');
+      }
+    },
+    [handlePositionChange]
+  );
 
   return (
     <GameContext.Provider
@@ -398,7 +452,7 @@ const GameProvider: React.FC<GameProviderProp> = ({ children }) => {
         attackQueueRef,
         selectedMapTileInfo,
         initGameInfo,
-        activeAbility
+        activeAbility,
       }}
     >
       <GameDispatch.Provider
@@ -429,7 +483,7 @@ const GameProvider: React.FC<GameProviderProp> = ({ children }) => {
           halfArmy,
           clearQueue,
           popQueue,
-          selectGeneral
+          selectGeneral,
         }}
       >
         {children}

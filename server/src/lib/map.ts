@@ -9,7 +9,6 @@ const EffectType = {
   Airstrike: 'Airstrike',
 } as const;
 
-
 const directions = [
   new Point(-1, -1),
   new Point(0, -1),
@@ -38,7 +37,6 @@ class GameMap {
   minKingDistance: number;
   activeEffects: any[] = [];
 
-
   constructor(
     public id: string,
     public name: string,
@@ -55,25 +53,17 @@ class GameMap {
     if (mountain + city === 0) {
       this.mountain = this.city = 0;
     } else {
-      this.mountain = Math.ceil(
-        (((this.width * this.height) / 4) * mountain) / (mountain + city)
-      );
-      this.city = Math.ceil(
-        (((this.width * this.height) / 6) * city) / (mountain + city)
-      );
+      this.mountain = Math.ceil((((this.width * this.height) / 4) * mountain) / (mountain + city));
+      this.city = Math.ceil((((this.width * this.height) / 6) * city) / (mountain + city));
       console.log('mountains', this.mountain, 'cities', this.city);
     }
-    this.swamp = Math.ceil(
-      ((this.width * this.height - this.mountain - this.city) / 3) * swamp
-    );
+    this.swamp = Math.ceil(((this.width * this.height - this.mountain - this.city) / 3) * swamp);
     this.players = players;
-    this.map = Array.from(Array(this.width), () =>
-      Array(this.height).fill(null)
-    );
+    this.map = Array.from(Array(this.width), () => Array(this.height).fill(null));
     this.turn = 0;
     this.revealKing = revealKing;
     this.minKingDistance = Math.ceil(Math.sqrt(this.width * this.height) / this.players.length);
-    console.log('Width:', this.width, 'Height:', this.height, "players:", this.players.length);
+    console.log('Width:', this.width, 'Height:', this.height, 'players:', this.players.length);
     console.log('minKingDistance', this.minKingDistance);
   }
 
@@ -103,9 +93,7 @@ class GameMap {
   }
 
   checkConnection(obstacleCount: number) {
-    const conn = new Array(this.width * this.height)
-      .fill(null)
-      .map((_, i) => i);
+    const conn = new Array(this.width * this.height).fill(null).map((_, i) => i);
     const size = new Array(this.width * this.height).fill(1);
     let connected = false;
 
@@ -119,10 +107,7 @@ class GameMap {
           ];
           for (const neighbor of neighbors) {
             const { x, y } = neighbor;
-            if (
-              this.withinMap(new Point(x, y)) &&
-              !this.isObstacle(this.map[x][y])
-            ) {
+            if (this.withinMap(new Point(x, y)) && !this.isObstacle(this.map[x][y])) {
               const lastPoint = x * this.height + y;
               const curFather = this.getFather(conn, curPoint);
               const lastFather = this.getFather(conn, lastPoint);
@@ -138,10 +123,7 @@ class GameMap {
             }
           }
         }
-        if (
-          size[this.getFather(conn, i * this.height + j)] >=
-          this.width * this.height - obstacleCount
-        ) {
+        if (size[this.getFather(conn, i * this.height + j)] >= this.width * this.height - obstacleCount) {
           connected = true;
           break;
         }
@@ -169,20 +151,16 @@ class GameMap {
         let y = getRandomInt(0, this.height);
         pos = new Point(x, y);
         let block = this.getBlock(pos);
-        if (block.type !== TileType.King
-          && block.type !== TileType.Swamp
-          && block.type !== TileType.Mountain
-          && block.type !== TileType.City) {
+        if (
+          block.type !== TileType.King &&
+          block.type !== TileType.Swamp &&
+          block.type !== TileType.Mountain &&
+          block.type !== TileType.City
+        ) {
           let flag = true;
           for (let j = 0; j < i; ++j) {
             const otherKing = this.players[j].king;
-            if (
-              otherKing &&
-              calcDistance(
-                new Point(otherKing.x, otherKing.y),
-                new Point(x, y)
-              ) <= this.minKingDistance
-            ) {
+            if (otherKing && calcDistance(new Point(otherKing.x, otherKing.y), new Point(x, y)) <= this.minKingDistance) {
               flag = false;
               break;
             }
@@ -294,24 +272,19 @@ class GameMap {
 
   transferBlock(block: Block, player: any): void {
     this.map[block.x][block.y].player = player;
-    if (block.type !== TileType.King) { // at this time, king have been dominated
-      this.map[block.x][block.y].unit = Math.ceil(
-        this.map[block.x][block.y].unit / 2
-      );
+    if (block.type !== TileType.King) {
+      // at this time, king have been dominated
+      this.map[block.x][block.y].unit = Math.ceil(this.map[block.x][block.y].unit / 2);
     }
   }
 
   withinMap(point: Point): boolean {
-    return (
-      0 <= point.x &&
-      point.x < this.width &&
-      0 <= point.y &&
-      point.y < this.height
-    );
+    return 0 <= point.x && point.x < this.width && 0 <= point.y && point.y < this.height;
   }
 
-  updateTurn(): void {
+  updateTurn(): any[] {
     this.turn++;
+    const appliedEffects: any[] = [];
 
     // Process Commander Effects
     for (let i = this.activeEffects.length - 1; i >= 0; i--) {
@@ -330,10 +303,12 @@ class GameMap {
               }
             }
           }
+          appliedEffects.push(effect);
         }
         this.activeEffects.splice(i, 1);
       }
     }
+    return appliedEffects;
   }
 
   updateUnit(): void {
@@ -341,20 +316,16 @@ class GameMap {
       for (let j = 0; j < this.height; j++) {
         switch (this.map[i][j].type) {
           case TileType.Plain:
-            if (this.map[i][j].player && this.turn % 800 === 0)
-              this.map[i][j].unit += 1;
+            if (this.map[i][j].player && this.turn % 800 === 0) this.map[i][j].unit += 1;
             break;
           case TileType.King:
-            if (this.turn % 32 === 0)
-              this.map[i][j].unit += 1;
+            if (this.turn % 32 === 0) this.map[i][j].unit += 1;
             break;
           case TileType.City:
-            if (this.map[i][j].player && this.turn % 32 === 0)
-              this.map[i][j].unit += 1;
+            if (this.map[i][j].player && this.turn % 32 === 0) this.map[i][j].unit += 1;
             break;
           case TileType.Swamp:
-            if (this.map[i][j].player && this.turn % 32 === 0)
-              this.map[i][j].unit = Math.max(0, this.map[i][j].unit - 1);
+            if (this.map[i][j].player && this.turn % 32 === 0) this.map[i][j].unit = Math.max(0, this.map[i][j].unit - 1);
             if (this.map[i][j].unit <= 0) {
               this.map[i][j].unit = 0;
               if (this.map[i][j].player) {
@@ -373,11 +344,9 @@ class GameMap {
   commendable(player: any, focus: Point, newFocus: Point): boolean {
     const possibleMove = this.withinMap(focus) && this.withinMap(newFocus);
     if (!possibleMove) return false;
-    if (![focus.x, focus.y, newFocus.x, newFocus.y].every(Number.isInteger))
-      return false;
+    if (![focus.x, focus.y, newFocus.x, newFocus.y].every(Number.isInteger)) return false;
     const isOwner = this.ownBlock(player, focus);
-    const orthogonallyAdjacent =
-      Math.abs(focus.x - newFocus.x) + Math.abs(focus.y - newFocus.y) === 1;
+    const orthogonallyAdjacent = Math.abs(focus.x - newFocus.x) + Math.abs(focus.y - newFocus.y) === 1;
     const notMountain = this.getBlock(newFocus).type !== TileType.Mountain;
     return isOwner && orthogonallyAdjacent && notMountain;
   }
@@ -400,22 +369,13 @@ class GameMap {
 
   getViewPlayer(player: any): Promise<Block[][]> {
     // Get the view of the player from the whole map
-    const viewOfPlayer: Block[][] = Array.from(Array(this.width), () =>
-      Array(this.height).fill(null)
-    );
+    const viewOfPlayer: Block[][] = Array.from(Array(this.width), () => Array(this.height).fill(null));
 
     // init
     for (let i = 0; i < this.width; i++) {
       for (let j = 0; j < this.height; j++) {
         const origin = this.getBlock(new Point(i, j));
-        const block = new Block(
-          origin.x,
-          origin.y,
-          origin.type,
-          origin.unit,
-          origin.player,
-          origin.isAlwaysRevealed,
-        );
+        const block = new Block(origin.x, origin.y, origin.type, origin.unit, origin.player, origin.isAlwaysRevealed);
         block.unitsCountRevealed = false; // default to false
         if (block.isAlwaysRevealed) {
           viewOfPlayer[i][j] = block;
@@ -441,14 +401,7 @@ class GameMap {
         const point = new Point(i, j);
         const origin = this.getBlock(point);
         if (origin.player && origin.player.team === player.team) {
-          const block = new Block(
-            origin.x,
-            origin.y,
-            origin.type,
-            origin.unit,
-            origin.player,
-            origin.isAlwaysRevealed,
-          );
+          const block = new Block(origin.x, origin.y, origin.type, origin.unit, origin.player, origin.isAlwaysRevealed);
           block.unitsCountRevealed = true;
           viewOfPlayer[i][j] = block;
 
@@ -462,7 +415,7 @@ class GameMap {
                 newOrigin.type,
                 newOrigin.unit,
                 newOrigin.player,
-                newOrigin.isAlwaysRevealed,
+                newOrigin.isAlwaysRevealed
               );
               block.unitsCountRevealed = true;
               viewOfPlayer[newPoint.x][newPoint.y] = block;
@@ -480,9 +433,7 @@ class GameMap {
             const pt = new Point(effect.center.x + dx, effect.center.y + dy);
             if (this.withinMap(pt)) {
               const origin = this.getBlock(pt);
-              const block = new Block(
-                origin.x, origin.y, origin.type, origin.unit, origin.player, origin.isAlwaysRevealed
-              );
+              const block = new Block(origin.x, origin.y, origin.type, origin.unit, origin.player, origin.isAlwaysRevealed);
               block.unitsCountRevealed = true;
               viewOfPlayer[pt.x][pt.y] = block;
             }

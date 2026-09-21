@@ -8,6 +8,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import MilitaryTechOutlinedIcon from '@mui/icons-material/MilitaryTechOutlined';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import {
   BattlefieldBackdrop,
   Brand,
@@ -20,6 +21,7 @@ export default function Home() {
   const { online } = useRooms(10000);
   const router = useRouter();
   const [error, setError] = useState('');
+  const [tutorialStarting, setTutorialStarting] = useState(false);
 
   useEffect(() => {
     if (typeof router.query.joinError === 'string') {
@@ -27,7 +29,7 @@ export default function Home() {
       // Remove the query param so refreshing doesn't re-show the error
       void router.replace('/', undefined, { shallow: true });
     }
-  }, [router.query.joinError]);
+  }, [router, router.query.joinError]);
 
   return (
     <PageFrame online={online}>
@@ -65,6 +67,52 @@ export default function Home() {
               <ArrowForwardIcon className='g-hero-action-arrow' />
             </Link>
           </div>
+          <button
+            disabled={tutorialStarting}
+            onClick={async () => {
+              if (tutorialStarting) return;
+              setTutorialStarting(true);
+              setError('');
+              try {
+                const res = await fetch(
+                  `${process.env.NEXT_PUBLIC_SERVER_API}/create_sandbox`
+                );
+                const data = await res.json();
+                if (!res.ok || !data.success || !data.roomId)
+                  throw new Error(
+                    data.message || 'Failed to create the tutorial room'
+                  );
+                await router.push(`/rooms/${data.roomId}?tutorial=true`);
+              } catch (cause) {
+                setError(
+                  cause instanceof Error
+                    ? cause.message
+                    : 'Failed to connect to server'
+                );
+                setTutorialStarting(false);
+              }
+            }}
+            className='g-home-tutorial'
+            style={{
+              cursor: tutorialStarting ? 'wait' : 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            <SchoolOutlinedIcon />
+            <span>
+              <b>
+                {tutorialStarting
+                  ? 'Preparing Tutorial…'
+                  : 'Interactive Tutorial'}
+              </b>
+              <small>
+                {tutorialStarting
+                  ? 'Creating your private training room'
+                  : 'Learn by playing · Free practice with extra energy'}
+              </small>
+            </span>
+            <ArrowForwardIcon />
+          </button>
           {error && (
             <div className='g-page-error-banner' role='alert'>
               <ErrorOutlineIcon />

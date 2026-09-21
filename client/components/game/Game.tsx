@@ -5,6 +5,7 @@ import LeaderBoard from './LeaderBoard';
 import GameTopBar from './GameTopBar';
 import OverDialog from './OverDialog';
 import CommanderPanel from './CommanderPanel';
+import InGameTutorial from './InGameTutorial';
 import { useGame, useGameDispatch } from '@/context/GameContext';
 
 export default function Game() {
@@ -38,11 +39,32 @@ export default function Game() {
     <main className='generals-root g-game-screen'>
       <GameTopBar onSurrender={handleReturnClick} />
       <div className='g-game-layout'>
-        <aside className='g-game-left'><LeaderBoard leaderBoardTable={leaderBoardData} players={room.players} warringStatesMode={room.warringStatesMode} matchHud myPlayerId={myPlayerId} /></aside>
-        <section className='g-game-battlefield' aria-label='Game battlefield'><GameMap /></section>
-        <aside className='g-game-right'><CommanderPanel /></aside>
+        <aside className='g-game-left'>
+          <LeaderBoard
+            leaderBoardTable={leaderBoardData}
+            players={room.players}
+            warringStatesMode={room.warringStatesMode}
+            matchHud
+            myPlayerId={myPlayerId}
+          />
+        </aside>
+        <section
+          className='g-game-battlefield'
+          aria-label='Game battlefield'
+          data-tutorial='battlefield'
+        >
+          <GameMap />
+          <InGameTutorial />
+        </section>
+        <aside className='g-game-right'>
+          <CommanderPanel />
+        </aside>
       </div>
-      <SurrenderDialog isOpen={isSurrenderDialogOpen} setOpen={setSurrenderDialogOpen} handleSurrender={handleSurrender} />
+      <SurrenderDialog
+        isOpen={isSurrenderDialogOpen}
+        setOpen={setSurrenderDialogOpen}
+        handleSurrender={handleSurrender}
+      />
       <OverDialog />
     </main>
   );

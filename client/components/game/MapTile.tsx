@@ -29,6 +29,7 @@ interface MapTileProps {
   isNextPossibleMove: boolean;
   warringStatesMode: boolean;
   isFortified?: boolean;
+  tutorialTarget?: string;
 }
 
 export default React.memo(function MapTile(props: MapTileProps) {
@@ -47,6 +48,7 @@ export default React.memo(function MapTile(props: MapTileProps) {
     isNextPossibleMove,
     warringStatesMode = false,
     isFortified = false,
+    tutorialTarget,
   } = props;
   const [cursorStyle, setCursorStyle] = useState('default');
 
@@ -139,6 +141,10 @@ export default React.memo(function MapTile(props: MapTileProps) {
   return (
     <div
       className={_className}
+      data-map-tile='true'
+      data-map-x={x}
+      data-map-y={y}
+      data-tutorial={tutorialTarget}
       style={{
         position: 'absolute',
         left: tileX,
@@ -201,7 +207,7 @@ export default React.memo(function MapTile(props: MapTileProps) {
           }}
           ref={(node) => {
             if (node) {
-              node.style.setProperty("user-select", "none", "important");
+              node.style.setProperty('user-select', 'none', 'important');
             }
           }}
         >

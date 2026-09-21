@@ -74,6 +74,19 @@ Your goal is to capture other generals.
 
 ## Development
 
+### Interactive tutorial
+
+Click **Interactive Tutorial** on the home page. The server creates a private
+14×14 sandbox with fixed General positions, a passive Practice Opponent,
+visible Generals, a larger starting army, and 1000 training Energy. The guide
+uses pointers for specific controls and pointer-free cards for keyboard lessons.
+
+The guide covers selecting the General, moving, splitting an army, troop growth,
+the leaderboard, chat, Math challenges, Scout, Reinforce, Airstrike, and
+capturing the enemy General. Capturing the practice opponent completes the guide
+without closing the sandbox. The player can dismiss the guide and continue
+experimenting with a full Energy refill.
+
 ### client: nextjs
 
 First, run the development server:

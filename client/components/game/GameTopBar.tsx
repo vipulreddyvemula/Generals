@@ -8,6 +8,7 @@ import SignalCellularAltIcon from '@mui/icons-material/SignalCellularAlt';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { Brand, CrownMark, HowToPlayModal, Status } from '@/components/GeneralsUi';
 import { useGame } from '@/context/GameContext';
+import { copyToClipboard } from '@/lib/utils';
 
 export default function GameTopBar({
   onSurrender,
@@ -46,11 +47,11 @@ export default function GameTopBar({
   );
   const clock = `${String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:${String(elapsedSeconds % 60).padStart(2, '0')}`;
   const copyCode = async () => {
-    try {
-      await navigator.clipboard.writeText(room.id);
+    const success = await copyToClipboard(room.id);
+    if (success) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1200);
-    } catch {
+    } else {
       setCopied(false);
     }
   };
@@ -65,7 +66,7 @@ export default function GameTopBar({
         <div className='g-game-room-meta'>
           <div>
             Room: {room.roomName}{' '}
-            <button onClick={copyCode} aria-label='Copy room code'>
+            <button onClick={copyCode} aria-label='Copy room code' className={copied ? 'g-copied' : ''}>
               {copied ? <CheckIcon /> : <ContentCopyOutlinedIcon />}
             </button>
           </div>

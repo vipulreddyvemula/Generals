@@ -4,22 +4,23 @@ export interface RatePolicy {
 }
 
 export const SOCKET_EVENT_POLICIES: Readonly<Record<string, RatePolicy>> = Object.freeze({
-  attack:                  { burst: 16, refillMs: 1000 },
-  surrender:               { burst: 1,  refillMs: 10_000 },
-  leave_room:              { burst: 1,  refillMs: 5000 },
-  set_team:                { burst: 6,  refillMs: 10_000 },
-  change_room_setting:     { burst: 24, refillMs: 1000 },
-  player_message:          { burst: 6,  refillMs: 5000 },
-  activate_ability:        { burst: 6,  refillMs: 3000 },
-  force_start:             { burst: 4,  refillMs: 10_000 },
-  change_host:             { burst: 4,  refillMs: 10_000 },
-  get_room_info:           { burst: 10, refillMs: 1000 },
-  get_commander_config:    { burst: 5,  refillMs: 10_000 },
+  attack: { burst: 16, refillMs: 1000 },
+  surrender: { burst: 1, refillMs: 10_000 },
+  leave_room: { burst: 1, refillMs: 5000 },
+  set_team: { burst: 6, refillMs: 10_000 },
+  change_room_setting: { burst: 24, refillMs: 1000 },
+  player_message: { burst: 6, refillMs: 5000 },
+  activate_ability: { burst: 6, refillMs: 3000 },
+  force_start: { burst: 4, refillMs: 10_000 },
+  change_host: { burst: 4, refillMs: 10_000 },
+  get_room_info: { burst: 10, refillMs: 1000 },
+  get_commander_config: { burst: 5, refillMs: 10_000 },
+  tutorial_complete: { burst: 2, refillMs: 10_000 },
   // Math-challenge events
-  request_math_challenge:  { burst: 4,  refillMs: 30_000 },
-  request_challenge:       { burst: 4,  refillMs: 30_000 }, // legacy alias
-  submit_math_answer:      { burst: 8,  refillMs: 30_000 },
-  submit_challenge:        { burst: 8,  refillMs: 30_000 }, // legacy alias
+  request_math_challenge: { burst: 4, refillMs: 30_000 },
+  request_challenge: { burst: 4, refillMs: 30_000 }, // legacy alias
+  submit_math_answer: { burst: 8, refillMs: 30_000 },
+  submit_challenge: { burst: 8, refillMs: 30_000 }, // legacy alias
 });
 
 export const SESSION_IP_POLICY: RatePolicy = { burst: 600, refillMs: 60_000 };

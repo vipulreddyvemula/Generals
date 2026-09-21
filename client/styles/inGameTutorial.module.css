@@ -1,0 +1,324 @@
+.tutorialLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  pointer-events: none;
+  color: #eaf2fa;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.shade {
+  position: fixed;
+  background: rgba(2, 8, 14, 0.16);
+  pointer-events: none;
+}
+
+.fullShade {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 8, 14, 0.52);
+  pointer-events: none;
+}
+
+.targetRing {
+  position: fixed;
+  border: 2px solid #f3c969;
+  border-radius: 9px;
+  box-shadow:
+    0 0 0 3px rgba(243, 201, 105, 0.18),
+    0 0 16px rgba(243, 201, 105, 0.55);
+  animation: targetPulse 1.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.targetRing span {
+  position: absolute;
+  top: -25px;
+  left: 0;
+  padding: 4px 7px;
+  border-radius: 3px 3px 0 0;
+  background: #f3c969;
+  color: #101c26;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1.2px;
+  white-space: nowrap;
+}
+
+.connector {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.connector line {
+  stroke: #f3c969;
+  stroke-width: 2;
+  stroke-dasharray: 7 6;
+  filter: drop-shadow(0 1px 3px #000);
+  animation: dash 1.4s linear infinite;
+}
+
+.connector path {
+  fill: #f3c969;
+}
+
+.tutorialBox {
+  position: fixed;
+  padding: 15px 16px 13px;
+  border: 1px solid #d9b765;
+  border-radius: 9px;
+  background: rgba(7, 20, 31, 0.94);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.52);
+  pointer-events: auto;
+  animation: tutorialCardIn 440ms ease-out;
+}
+
+.tutorialBox.leaving {
+  animation: tutorialCardOut 360ms ease-in forwards;
+}
+
+.fallbackBox {
+  transform: translateX(-50%);
+}
+
+.infoBox {
+  max-height: calc(100vh - 48px);
+}
+
+.tutorialBox h2 {
+  margin: 7px 0 6px;
+  color: #f4e4bc;
+  font-family: Georgia, serif;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.tutorialBox p {
+  margin: 0;
+  color: #c6d5df;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.stepHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #91a9b9;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+}
+
+.kicker {
+  color: #efc96f;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+}
+
+.actionPrompt {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-left: 3px solid #f3c969;
+  background: rgba(243, 201, 105, 0.1);
+  color: #ffe4a5;
+  font-size: 12px;
+}
+
+.actionPrompt span {
+  font-size: 16px;
+  animation: actionNudge 1.1s ease-in-out infinite;
+}
+.tutorialBox .waiting {
+  margin-top: 8px;
+  color: #86d8f1;
+  font-size: 11px;
+}
+
+.tutorialBox .transitionNotice {
+  margin-top: 7px;
+  color: #79d6ad;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.progress {
+  display: flex;
+  gap: 5px;
+  margin-top: 11px;
+}
+
+.progress i {
+  flex: 1;
+  height: 4px;
+  border-radius: 4px;
+  background: #334958;
+}
+
+.progress .done {
+  background: #63caa6;
+}
+.progress .current {
+  background: #f3c969;
+}
+
+.secondaryActions,
+.completionActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.stepNavigation {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.stepNavigation button:last-child {
+  border-color: rgba(217, 183, 101, 0.72);
+  color: #f3d58c;
+}
+
+.tutorialBox button {
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid #506a7d;
+  border-radius: 4px;
+  background: #14293a;
+  color: #dce8ef;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.tutorialBox button:hover {
+  border-color: #e3bf68;
+  background: #203d51;
+}
+
+.tutorialBox button:disabled {
+  border-color: #334958;
+  background: #10202c;
+  color: #657987;
+  cursor: not-allowed;
+}
+.tutorialBox button:focus-visible {
+  outline: 3px solid #f3c969;
+  outline-offset: 2px;
+}
+.tutorialBox .primaryButton {
+  background: #d6b561;
+  border-color: #efd17e;
+  color: #101c26;
+  font-weight: 800;
+}
+
+.completeBox {
+  top: 50%;
+  left: 50%;
+  width: min(440px, calc(100vw - 28px));
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.completeBox h2 {
+  font-size: 26px;
+}
+.completeBox .completionActions {
+  justify-content: center;
+}
+
+@keyframes targetPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(243, 201, 105, 0.16),
+      0 0 12px rgba(243, 201, 105, 0.38);
+  }
+  50% {
+    box-shadow:
+      0 0 0 5px rgba(243, 201, 105, 0.06),
+      0 0 20px rgba(243, 201, 105, 0.6);
+  }
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -26;
+  }
+}
+
+@keyframes tutorialCardIn {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes tutorialCardOut {
+  from {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(3px);
+  }
+}
+
+@keyframes actionNudge {
+  0%,
+  100% {
+    translate: 0;
+  }
+  50% {
+    translate: 4px;
+  }
+}
+
+@media (max-width: 600px) {
+  .infoBox {
+    right: 12px !important;
+    bottom: 12px !important;
+  }
+
+  .tutorialBox {
+    padding: 16px;
+  }
+  .tutorialBox h2 {
+    font-size: 19px;
+  }
+  .tutorialBox p {
+    font-size: 12px;
+  }
+  .targetRing span {
+    top: auto;
+    bottom: -24px;
+    border-radius: 0 0 3px 3px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .targetRing,
+  .connector line,
+  .tutorialBox,
+  .actionPrompt span {
+    animation: none;
+  }
+}

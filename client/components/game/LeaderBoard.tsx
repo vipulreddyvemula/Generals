@@ -12,6 +12,7 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTranslation } from 'next-i18next';
 import React, { useState, useEffect } from 'react';
 import StarIcon from '@mui/icons-material/Star';
+import { Resizable } from 're-resizable';
 import { Player, LeaderBoardTable, UserData } from '@/lib/types';
 import { ColorArr, MaxTeamNum, WarringStates } from '@/lib/constants';
 
@@ -50,10 +51,70 @@ export default function LeaderBoard(props: LeaderBoardProps) {
       .filter((player) => player.team !== MaxTeamNum + 1)
       .map((player) => {
         const score = leaderBoardTable?.find((row) => row[0] === player.color);
-        return { color: player.color, army: score?.[2] || 0, land: score?.[3] || 0, player };
+        return {
+          color: player.color,
+          army: score?.[2] || 0,
+          land: score?.[3] || 0,
+          player,
+        };
       })
       .sort((a, b) => b.army - a.army || b.land - a.land);
-    return <section className='g-panel g-hud-leaderboard'><h2>PLAYERS</h2><div className='g-leader-head'><span>#</span><span>Player</span><span>Army</span><span>Land</span></div><ol>{ranked.map((entry, index) => <li key={entry.color} className={entry.player?.id === myPlayerId ? 'self' : ''}><span>{index + 1}</span><span className='g-leader-name'><i style={{ background: ColorArr[entry.color] }} /><span>{entry.player?.username || `Player ${entry.color}`}{entry.player?.id === myPlayerId && <small> (You)</small>}</span></span><b>{entry.army}</b><span>{entry.land}</span></li>)}</ol></section>;
+    return (
+      <Resizable
+        defaultSize={{
+          width: '100%',
+          height: 'auto',
+        }}
+        minWidth={150}
+        minHeight={100}
+        maxWidth={600}
+        maxHeight="80vh"
+        style={{ pointerEvents: 'auto' }}
+        enable={{
+          top: true,
+          right: true,
+          bottom: true,
+          left: true,
+          topRight: true,
+          bottomRight: true,
+          bottomLeft: true,
+          topLeft: true,
+        }}
+      >
+        <section
+          className='g-panel g-hud-leaderboard'
+          data-tutorial='leaderboard'
+          style={{ width: '100%', height: '100%', boxSizing: 'border-box' }}
+        >
+          <h2>PLAYERS</h2>
+          <div className='g-leader-head'>
+            <span>#</span>
+            <span>Player</span>
+            <span>Army</span>
+            <span>Land</span>
+          </div>
+          <ol>
+            {ranked.map((entry, index) => (
+              <li
+                key={entry.color}
+                className={entry.player?.id === myPlayerId ? 'self' : ''}
+              >
+                <span>{index + 1}</span>
+                <span className='g-leader-name'>
+                  <i style={{ background: ColorArr[entry.color] }} />
+                  <span>
+                    {entry.player?.username || `Player ${entry.color}`}
+                    {entry.player?.id === myPlayerId && <small> (You)</small>}
+                  </span>
+                </span>
+                <b>{entry.army}</b>
+                <span>{entry.land}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      </Resizable>
+    );
   }
 
   if (!leaderBoardTable) return null;
@@ -135,24 +196,54 @@ export default function LeaderBoard(props: LeaderBoardProps) {
         >
           <TableHead>
             <TableRow
-              sx={{ backgroundColor: '#0b1a29', whiteSpace: 'nowrap', cursor: 'pointer' }}
+              sx={{
+                backgroundColor: '#0b1a29',
+                whiteSpace: 'nowrap',
+                cursor: 'pointer',
+              }}
               onClick={() => {
                 setGameDockExpand(!gameDockExpand);
               }}
             >
-              <TableCell align='center' sx={{ display: warringStatesMode ? '' : 'none' }}>
+              <TableCell
+                align='center'
+                sx={{ display: warringStatesMode ? '' : 'none' }}
+              >
                 {t('country')}
               </TableCell>
-              <TableCell align='center' sx={{ display: gameDockExpand && checkedPlayers && setCheckedPlayers ? '' : 'none' }}>
+              <TableCell
+                align='center'
+                sx={{
+                  display:
+                    gameDockExpand && checkedPlayers && setCheckedPlayers
+                      ? ''
+                      : 'none',
+                }}
+              >
                 {t('view')}
               </TableCell>
               <TableCell align='center' sx={{ minWidth: '40px' }}>
-                <StarIcon sx={{ color: '#ffd700', fontSize: '18px', verticalAlign: 'middle' }} />
+                <StarIcon
+                  sx={{
+                    color: '#ffd700',
+                    fontSize: '18px',
+                    verticalAlign: 'middle',
+                  }}
+                />
               </TableCell>
-              <TableCell align='center' sx={{ display: gameDockExpand ? '' : 'none', minWidth: '150px' }}>
+              <TableCell
+                align='center'
+                sx={{
+                  display: gameDockExpand ? '' : 'none',
+                  minWidth: '150px',
+                }}
+              >
                 Player
               </TableCell>
-              <TableCell align='center' sx={{ display: gameDockExpand ? 'none' : '', padding: '1px' }}></TableCell>
+              <TableCell
+                align='center'
+                sx={{ display: gameDockExpand ? 'none' : '', padding: '1px' }}
+              ></TableCell>
               <TableCell align='center'>Army</TableCell>
               <TableCell align='center'>Land</TableCell>
             </TableRow>
@@ -199,8 +290,22 @@ export default function LeaderBoard(props: LeaderBoardProps) {
                         }}
                       />
                     </TableCell>
-                    <TableCell align='center' sx={{ display: gameDockExpand ? '' : 'none', backgroundColor: '#222', color: 'white' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                    <TableCell
+                      align='center'
+                      sx={{
+                        display: gameDockExpand ? '' : 'none',
+                        backgroundColor: '#222',
+                        color: 'white',
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px',
+                        }}
+                      >
                         <StarIcon sx={{ color: '#ffd700', fontSize: '18px' }} />
                         0
                       </Box>
@@ -209,7 +314,7 @@ export default function LeaderBoard(props: LeaderBoardProps) {
                       sx={{
                         display: gameDockExpand ? '' : 'none',
                         backgroundColor: '#555',
-                        color: 'white !important'
+                        color: 'white !important',
                       }}
                       align='center'
                       onClick={() => {
@@ -222,7 +327,7 @@ export default function LeaderBoard(props: LeaderBoardProps) {
                       sx={{
                         display: gameDockExpand ? 'none' : '',
                         backgroundColor: '#555',
-                        color: 'white !important'
+                        color: 'white !important',
                       }}
                       onClick={() => {
                         setGameDockExpand(!gameDockExpand);
@@ -232,7 +337,10 @@ export default function LeaderBoard(props: LeaderBoardProps) {
                     </TableCell>
                     <TableCell
                       align='center'
-                      sx={{ backgroundColor: 'rgba(10,22,35,.92)', color: '#eaf2fa' }}
+                      sx={{
+                        backgroundColor: 'rgba(10,22,35,.92)',
+                        color: '#eaf2fa',
+                      }}
                       onClick={() => {
                         setGameDockExpand(!gameDockExpand);
                       }}
@@ -241,7 +349,10 @@ export default function LeaderBoard(props: LeaderBoardProps) {
                     </TableCell>
                     <TableCell
                       align='center'
-                      sx={{ backgroundColor: 'rgba(10,22,35,.92)', color: '#eaf2fa' }}
+                      sx={{
+                        backgroundColor: 'rgba(10,22,35,.92)',
+                        color: '#eaf2fa',
+                      }}
                       onClick={() => {
                         setGameDockExpand(!gameDockExpand);
                       }}
@@ -261,8 +372,22 @@ export default function LeaderBoard(props: LeaderBoardProps) {
                             : 'none',
                       }}
                     ></TableCell>
-                    <TableCell align='center' sx={{ display: gameDockExpand ? '' : 'none', backgroundColor: '#222', color: 'white' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                    <TableCell
+                      align='center'
+                      sx={{
+                        display: gameDockExpand ? '' : 'none',
+                        backgroundColor: '#222',
+                        color: 'white',
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px',
+                        }}
+                      >
                         <StarIcon sx={{ color: '#ffd700', fontSize: '18px' }} />
                         0
                       </Box>
@@ -292,7 +417,10 @@ export default function LeaderBoard(props: LeaderBoardProps) {
                     ></TableCell>
                     <TableCell
                       align='center'
-                      sx={{ backgroundColor: 'rgba(10,22,35,.92)', color: '#eaf2fa' }}
+                      sx={{
+                        backgroundColor: 'rgba(10,22,35,.92)',
+                        color: '#eaf2fa',
+                      }}
                       onClick={() => {
                         setGameDockExpand(!gameDockExpand);
                       }}
@@ -301,7 +429,10 @@ export default function LeaderBoard(props: LeaderBoardProps) {
                     </TableCell>
                     <TableCell
                       align='center'
-                      sx={{ backgroundColor: 'rgba(10,22,35,.92)', color: '#eaf2fa' }}
+                      sx={{
+                        backgroundColor: 'rgba(10,22,35,.92)',
+                        color: '#eaf2fa',
+                      }}
                       onClick={() => {
                         setGameDockExpand(!gameDockExpand);
                       }}

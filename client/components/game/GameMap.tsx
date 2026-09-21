@@ -16,7 +16,14 @@ import UndoIcon from '@mui/icons-material/Undo';
 import { Box, IconButton, Tooltip, Typography } from '@mui/material';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTranslation } from 'next-i18next';
-import { MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  MutableRefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import MapTile from './MapTile';
 function GameMap() {
   const {
@@ -50,12 +57,22 @@ function GameMap() {
     setShowDirections(!showDirections);
   };
 
-  const { setSelectedMapTileInfo, halfArmy, clearQueue, popQueue, selectGeneral,
+  const {
+    setSelectedMapTileInfo,
+    halfArmy,
+    clearQueue,
+    popQueue,
+    selectGeneral,
 
-    handlePositionChange, testIfNextPossibleMove,
+    handlePositionChange,
+    testIfNextPossibleMove,
     handleClick,
     setActiveAbility,
-    attackUp, attackDown, attackLeft, attackRight } = useGameDispatch();
+    attackUp,
+    attackDown,
+    attackLeft,
+    attackRight,
+  } = useGameDispatch();
 
   const {
     tileSize,
@@ -90,6 +107,10 @@ function GameMap() {
     setPosition,
   ]);
 
+  const chooseHalfArmy = useCallback(() => {
+    halfArmy(touchHalf);
+  }, [halfArmy]);
+
   // useEffect(() => {
   //   if (isSmallScreen) {
   //     centerGeneral();
@@ -98,6 +119,14 @@ function GameMap() {
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')
+      ) {
+        return;
+      }
+
       if (activeAbility && event.key === 'Escape') {
         setActiveAbility(null);
         return;
@@ -106,46 +135,71 @@ function GameMap() {
       handleZoomOption(event.key);
       switch (event.key) {
         case 'z':
-          halfArmy(touchHalf);
+        case 'Z':
+          chooseHalfArmy();
           break;
         case 'e':
+        case 'E':
           popQueue();
           break;
         case 'q':
+        case 'Q':
           clearQueue();
           break;
         case 'g':
+        case 'G':
           selectGeneral();
           break;
         case 'c':
+        case 'C':
           setPosition({ x: 0, y: 0 });
           break;
         case 'h': // home
+        case 'H':
           centerGeneral();
           break;
         case 'a':
+        case 'A':
         case 'ArrowLeft': // 37 Left
           event.preventDefault();
           attackLeft(selectedMapTileInfo);
           break;
         case 'w':
+        case 'W':
         case 'ArrowUp': // 38 Up
           event.preventDefault();
           attackUp(selectedMapTileInfo);
           break;
         case 'd':
+        case 'D':
         case 'ArrowRight': // 39 Right
           event.preventDefault();
           attackRight(selectedMapTileInfo);
           break;
         case 's':
+        case 'S':
         case 'ArrowDown': // 40 Down
           event.preventDefault();
           attackDown(selectedMapTileInfo);
           break;
       }
     },
-    [attackDown, attackLeft, attackRight, attackUp, centerGeneral, clearQueue, halfArmy, handleZoomOption, popQueue, selectGeneral, selectedMapTileInfo, setPosition, activeAbility, setActiveAbility]
+    [
+      attackDown,
+      attackLeft,
+      attackRight,
+      attackUp,
+      centerGeneral,
+      clearQueue,
+      chooseHalfArmy,
+      handleZoomOption,
+      popQueue,
+      selectGeneral,
+      selectedMapTileInfo,
+      setPosition,
+      activeAbility,
+      setActiveAbility,
+    ]
   );
 
   const myPlayerIndex = useMemo(() => {
@@ -157,7 +211,10 @@ function GameMap() {
   let displayMapData = mapData.map((tiles, x) => {
     return tiles.map((tile, y) => {
       const [, color] = tile;
-      const isOwned = myPlayerIndex !== -1 && room.players[myPlayerIndex] ? color === room.players[myPlayerIndex].color : false;
+      const isOwned =
+        myPlayerIndex !== -1 && room.players[myPlayerIndex]
+          ? color === room.players[myPlayerIndex].color
+          : false;
       const _className = queueEmpty ? '' : mapQueueData[x][y].className;
 
       let tileHalf = false;
@@ -174,9 +231,10 @@ function GameMap() {
         } else {
           tileHalf = false;
         }
-        const isSelected = x === selectedMapTileInfo.x && y === selectedMapTileInfo.y;
+        const isSelected =
+          x === selectedMapTileInfo.x && y === selectedMapTileInfo.y;
         return isSelected;
-      }
+      };
       const isSelected = getIsSelected();
 
       return {
@@ -237,12 +295,23 @@ function GameMap() {
         const touch2 = event.touches[1];
         const distance = Math.sqrt(
           Math.pow(touch1.clientX - touch2.clientX, 2) +
-          Math.pow(touch1.clientY - touch2.clientY, 2)
+            Math.pow(touch1.clientY - touch2.clientY, 2)
         );
         initialDistance.current = distance;
       }
     },
-    [mapRef, tileSize, zoom, mapData, room.players, myPlayerIndex, position.x, position.y, setSelectedMapTileInfo, activeAbility]
+    [
+      mapRef,
+      tileSize,
+      zoom,
+      mapData,
+      room.players,
+      myPlayerIndex,
+      position.x,
+      position.y,
+      setSelectedMapTileInfo,
+      activeAbility,
+    ]
   );
 
   const handleTouchMove = useCallback(
@@ -306,7 +375,11 @@ function GameMap() {
           // console.log('valid touch move attack', x, y, className);
           touchHalf.current = false;
           const newPoint = { x, y };
-          handlePositionChange(selectedMapTileInfo, newPoint, `queue_${direction}`);
+          handlePositionChange(
+            selectedMapTileInfo,
+            newPoint,
+            `queue_${direction}`
+          );
           lastTouchPosition.current = newPoint;
         }
       } else if (event.touches.length === 2) {
@@ -314,14 +387,24 @@ function GameMap() {
         const touch2 = event.touches[1];
         const distance = Math.sqrt(
           Math.pow(touch1.clientX - touch2.clientX, 2) +
-          Math.pow(touch1.clientY - touch2.clientY, 2)
+            Math.pow(touch1.clientY - touch2.clientY, 2)
         );
         const delta = distance - initialDistance.current;
         const newZoom = Math.min(Math.max(zoom + delta * 0.0002, 0.2), 4.0);
         setZoom(newZoom);
       }
     },
-    [mapRef, setPosition, tileSize, zoom, selectedMapTileInfo, mapData, handlePositionChange, setZoom, activeAbility]
+    [
+      mapRef,
+      setPosition,
+      tileSize,
+      zoom,
+      selectedMapTileInfo,
+      mapData,
+      handlePositionChange,
+      setZoom,
+      activeAbility,
+    ]
   );
 
   const handleTouchEnd = useCallback((event: TouchEvent) => {
@@ -330,23 +413,19 @@ function GameMap() {
   }, []);
 
   useEffect(() => {
-    const mapNode = mapRef.current;
-    if (mapNode) {
-      mapNode.addEventListener('keydown', handleKeyDown);
-      return () => {
-        mapNode.removeEventListener('keydown', handleKeyDown);
-      };
-    }
-    return () => { };
-  }, [handleKeyDown, mapRef]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleKeyDown]);
 
   useEffect(() => {
     const mapNode = mapRef.current;
     if (mapNode) {
       mapNode.focus(); // 只在地图初始化的时候自动 focus 一次
     }
-    return () => { };
-  }, []);
+    return () => {};
+  }, [mapRef]);
 
   useEffect(() => {
     const mapNode = mapRef.current;
@@ -364,16 +443,17 @@ function GameMap() {
         mapNode.removeEventListener('touchend', handleTouchEnd);
       };
     }
-    return () => { };
+    return () => {};
   }, [mapRef, handleTouchStart, handleTouchMove, handleTouchEnd]);
 
   return (
     <div>
       <div
         ref={mapRef}
+        data-tutorial='map-board'
         tabIndex={0}
         onBlur={() => {
-          // TODO: inifite re-render loop. 
+          // TODO: inifite re-render loop.
           // when surrender or game over dialog is shown. onBlur will execute, it set SelectedMapTile so a re-render is triggered. in the next render, onBlur execute again
           // setSelectedMapTileInfo({ x: -1, y: -1, half: false, unitsCount: 0 });
         }}
@@ -384,6 +464,7 @@ function GameMap() {
           transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px)`,
           width: mapPixelHeight, // game's width and height are swapped
           height: mapPixelWidth,
+          outline: 'none',
         }}
       >
         {/* map key (x,y) example */}
@@ -392,20 +473,55 @@ function GameMap() {
         {displayMapData.map((tiles, x) => {
           return tiles.map((tile, y) => {
             return (
-              <div key={`${x}/${y}`}
+              <div
+                key={`${x}/${y}`}
                 onClick={() => {
                   mapRef.current?.focus();
+                  if (room.isSandbox) {
+                    window.dispatchEvent(
+                      new CustomEvent('tutorial-map-click', {
+                        detail: { x, y },
+                      })
+                    );
+                  }
+                  if (
+                    room.isSandbox &&
+                    document.body.dataset.tutorialStep === '0' &&
+                    tile.tile[0] === TileType.King &&
+                    tile.isOwned
+                  ) {
+                    setSelectedMapTileInfo({
+                      x,
+                      y,
+                      half: false,
+                      unitsCount: tile.tile[2],
+                    });
+                    return;
+                  }
                   handleClick(tile.tile, x, y, myPlayerIndex);
-                }}>
+                }}
+              >
                 <MapTile
-                  isNextPossibleMove={testIfNextPossibleMove(tile.tile[0], x, y)}
+                  isNextPossibleMove={testIfNextPossibleMove(
+                    tile.tile[0],
+                    x,
+                    y
+                  )}
                   zoom={zoom}
                   size={tileSize}
                   x={x}
                   y={y}
                   {...tile}
+                  tutorialTarget={
+                    room.isSandbox && tile.tile[0] === TileType.King
+                      ? tile.isOwned
+                        ? 'my-general'
+                        : 'enemy-general'
+                      : undefined
+                  }
                   isFortified={false}
-                  warringStatesMode={room.warringStatesMode} />
+                  warringStatesMode={room.warringStatesMode}
+                />
               </div>
             );
           });
@@ -445,7 +561,11 @@ function GameMap() {
             </IconButton>
           </Tooltip>
           <Tooltip title={t('howToPlay.toggle50')} placement='top'>
-            <IconButton onClick={() => halfArmy(touchHalf)}>
+            <IconButton
+              data-tutorial='half-move'
+              aria-label='Move 50 percent of this army'
+              onClick={chooseHalfArmy}
+            >
               <Typography variant='body2'>50%</Typography>
             </IconButton>
           </Tooltip>
@@ -489,7 +609,10 @@ function GameMap() {
               alignItems: 'center',
             }}
           >
-            <IconButton onClick={() => attackUp(selectedMapTileInfo)} className='attack-button'>
+            <IconButton
+              onClick={() => attackUp(selectedMapTileInfo)}
+              className='attack-button'
+            >
               <ArrowUpwardIcon />
             </IconButton>
             <Box
@@ -505,14 +628,23 @@ function GameMap() {
                 justifyContent: 'space-between',
               }}
             >
-              <IconButton onClick={() => attackLeft(selectedMapTileInfo)} className='attack-button'>
+              <IconButton
+                onClick={() => attackLeft(selectedMapTileInfo)}
+                className='attack-button'
+              >
                 <ArrowBackIcon />
               </IconButton>
-              <IconButton onClick={() => attackRight(selectedMapTileInfo)} className='attack-button'>
+              <IconButton
+                onClick={() => attackRight(selectedMapTileInfo)}
+                className='attack-button'
+              >
                 <ArrowForwardIcon />
               </IconButton>
             </Box>
-            <IconButton onClick={() => attackDown(selectedMapTileInfo)} className='attack-button'>
+            <IconButton
+              onClick={() => attackDown(selectedMapTileInfo)}
+              className='attack-button'
+            >
               <ArrowDownwardIcon />
             </IconButton>
           </Box>
