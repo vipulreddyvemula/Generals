@@ -498,7 +498,7 @@ function GameMap() {
                     });
                     return;
                   }
-                  handleClick(tile.tile, x, y, myPlayerIndex);
+                  console.log("CLICKED TILE", x, y, "activeAbility", activeAbility, "step", document.body.dataset.tutorialStep); handleClick(tile.tile, x, y, myPlayerIndex);
                 }}
               >
                 <MapTile

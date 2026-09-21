@@ -129,16 +129,16 @@ export function HowToPlayModal({
           <p>Spend your Energy to activate these powerful abilities:</p>
           <ul>
             <li>
-              <b>Scout — 20 Energy:</b> Reveals the area within a{' '}
-              <b>radius of 2</b> around the selected location.
+              <b>Scout — 20 Energy:</b> Reveals a <b>5×5 area</b> around the
+              selected location.
             </li>
             <li>
-              <b>Reinforce — 40 Energy:</b> Adds <b>40 soldiers</b> to one of
+              <b>Airstrike — 40 Energy:</b> Reduces enemy troops by <b>half</b>{' '}
+              within a <b>3×3 area</b> around the selected location.
+            </li>
+            <li>
+              <b>Reinforce — 50 Energy:</b> Adds <b>40 soldiers</b> to one of
               your owned tiles.
-            </li>
-            <li>
-              <b>Airstrike — 60 Energy:</b> Reduces enemy troops by <b>half</b>{' '}
-              within a <b>radius of 2</b> around the selected location.
             </li>
           </ul>
 

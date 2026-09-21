@@ -21,6 +21,7 @@ export const SOCKET_EVENT_POLICIES: Readonly<Record<string, RatePolicy>> = Objec
   request_challenge: { burst: 4, refillMs: 30_000 }, // legacy alias
   submit_math_answer: { burst: 8, refillMs: 30_000 },
   submit_challenge: { burst: 8, refillMs: 30_000 }, // legacy alias
+  skip_codeforces_challenge: { burst: 3, refillMs: 10_000 },
 });
 
 export const SESSION_IP_POLICY: RatePolicy = { burst: 600, refillMs: 60_000 };

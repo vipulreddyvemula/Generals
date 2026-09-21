@@ -47,6 +47,7 @@ class Player {
     public codeforcesHistoryLoading: boolean = false,
     public rewardedCodeforcesSubmissionIds: number[] = [],
     public lastCodeforcesVerificationAt: number = 0,
+    public codeforcesSkipCount: number = 0,
 
     // Commander Effects
     public scoutedTiles: Record<string, number> = {},
@@ -110,6 +111,7 @@ class Player {
     this.activeCodeforcesChallenge = null;
     this.rewardedCodeforcesSubmissionIds = [];
     this.lastCodeforcesVerificationAt = 0;
+    this.codeforcesSkipCount = 0;
     this.challengeCooldownUntilTurn = 0;
     this.scoutedTiles = {};
   }

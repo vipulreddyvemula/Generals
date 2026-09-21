@@ -7,3 +7,5 @@ server/custom_map/*
 temp.md
 lovable-reference/
 docs/ui-reference/
+.kiro/
+test_tutorial.js

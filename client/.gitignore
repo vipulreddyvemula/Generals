@@ -21,6 +21,7 @@ package-lock.json
 /.next/
 /.next-lan/
 /.next-validate/
+/.next-live/
 /out/
 
 # vercel

@@ -1,5 +1,5 @@
 import Player from '../src/lib/player';
-import { addCommanderEnergy, COMMANDER_CONFIG } from '../src/lib/commander/config';
+import { addCommanderEnergy, COMMANDER_CONFIG, getCodeforcesSkipCost } from '../src/lib/commander/config';
 import { MathGenerator } from '../src/lib/commander/math-generator';
 import {
   CODEFORCES_PROBLEMS,
@@ -35,6 +35,14 @@ describe('Commander challenge authority', () => {
     });
     expect(COMMANDER_CONFIG.codeforces.energyReward).toBe(50);
     expect(COMMANDER_CONFIG.codeforces.troopReward).toBe(10);
+    expect(COMMANDER_CONFIG.codeforces.skipEnergyCosts).toEqual([10, 20, 30]);
+  });
+
+  it('charges escalating Codeforces override costs capped at 30 energy', () => {
+    expect(getCodeforcesSkipCost(0)).toBe(10);
+    expect(getCodeforcesSkipCost(1)).toBe(20);
+    expect(getCodeforcesSkipCost(2)).toBe(30);
+    expect(getCodeforcesSkipCost(20)).toBe(30);
   });
 
   it('caps all challenge energy rewards at 100', () => {
@@ -49,6 +57,13 @@ describe('Commander challenge authority', () => {
     const serialized = JSON.parse(JSON.stringify(player));
     expect(serialized.activeChallenge.correctAnswer).toBeUndefined();
     expect(serialized.codeforcesSolvedSet).toBeUndefined();
+  });
+
+  it('resets the Codeforces override count for a new match', () => {
+    const player = new Player('p1', 's1', 'tourist', 1, 1);
+    player.codeforcesSkipCount = 3;
+    player.reset();
+    expect(player.codeforcesSkipCount).toBe(0);
   });
 
   it('selects a local Super Easy problem the player has not solved', () => {

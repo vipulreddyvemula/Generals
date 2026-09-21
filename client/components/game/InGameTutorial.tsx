@@ -76,20 +76,20 @@ const STEPS: TutorialStep[] = [
   {
     title: 'Scout',
     instruction:
-      'Scout costs 20 Energy and reveals a 7×7 area for about 5 seconds. Choose Scout, then target a tile to inspect hidden territory.',
+      'Scout costs 20 Energy and reveals a 5×5 area for about 5 seconds. Choose Scout, then target a tile to inspect hidden territory.',
     shortAction: 'Choose Scout, then target the map',
-  },
-  {
-    title: 'Reinforce',
-    instruction:
-      'Open Abilities, choose Reinforce, then target one of your blue tiles. Reinforce spends Energy to add 40 troops.',
-    shortAction: 'Use Reinforce on a blue tile',
   },
   {
     title: 'Airstrike',
     instruction:
-      'Airstrike costs 60 Energy. Choose it, then target enemy territory. After a short delay, it halves enemy troops in the targeted 3×3 area.',
+      'Airstrike costs 40 Energy. Choose it, then target enemy territory. After a short delay, it halves enemy troops in the targeted 3×3 area.',
     shortAction: 'Choose Airstrike, then target the enemy',
+  },
+  {
+    title: 'Reinforce',
+    instruction:
+      'Open Abilities, choose Reinforce, then target one of your blue tiles. Reinforce spends 50 Energy to add 40 troops.',
+    shortAction: 'Use Reinforce on a blue tile',
   },
   {
     title: 'Capture the enemy General',
@@ -102,6 +102,7 @@ const STEPS: TutorialStep[] = [
 const STEP_COMPLETE_HOLD_MS = 1600;
 const STEP_EXIT_ANIMATION_MS = 360;
 const INFORMATIONAL_STEPS = new Set([3, 4, 5]);
+const ABILITY_FEEDBACK_STEPS = new Set([8, 9, 10, 11]);
 
 type Rect = { top: number; left: number; width: number; height: number };
 type CardPosition = { top: number; left: number; width: number };
@@ -147,7 +148,11 @@ const countRevealedTiles = (map: MapData) =>
     0
   );
 
-export default function InGameTutorial() {
+export default function InGameTutorial({
+  suspended = false,
+}: {
+  suspended?: boolean;
+}) {
   const router = useRouter();
   const { room, socketRef, mapData, initGameInfo, activeAbility, myPlayerId } =
     useGame();
@@ -160,6 +165,9 @@ export default function InGameTutorial() {
   const [scouted, setScouted] = useState(false);
   const [reinforced, setReinforced] = useState(false);
   const [airstruck, setAirstruck] = useState(false);
+  const [waitingForAbilityEffect, setWaitingForAbilityEffect] = useState<
+    'Scout' | 'Reinforce' | 'Airstrike' | null
+  >(null);
   const [won, setWon] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -260,6 +268,7 @@ export default function InGameTutorial() {
         beforeRevealed: countRevealedTiles(visibleMap),
         serverApplied: false,
       };
+      setWaitingForAbilityEffect(abilityType);
     };
     const onAbilityEffectApplied = ({
       abilityType,
@@ -340,6 +349,7 @@ export default function InGameTutorial() {
     }
     if (!effectIsVisible) return;
     pendingAbilityRef.current = null;
+    setWaitingForAbilityEffect(null);
     if (pendingAbility.abilityType === 'Scout') setScouted(true);
     else if (pendingAbility.abilityType === 'Reinforce') setReinforced(true);
     else if (pendingAbility.abilityType === 'Airstrike') {
@@ -412,8 +422,8 @@ export default function InGameTutorial() {
     else if (step === 7 && mathAnswered) markStepComplete(7);
     else if (step === 8 && abilitiesOpened) markStepComplete(8);
     else if (step === 9 && scouted) markStepComplete(9);
-    else if (step === 10 && reinforced) markStepComplete(10);
-    else if (step === 11 && airstruck) markStepComplete(11);
+    else if (step === 10 && airstruck) markStepComplete(10);
+    else if (step === 11 && reinforced) markStepComplete(11);
   }, [
     abilitiesOpened,
     airstruck,
@@ -451,20 +461,20 @@ export default function InGameTutorial() {
       ];
     }
     if (step === 10) {
-      if (activeAbility === 'Reinforce') {
-        return ['[data-tutorial="my-general"]'];
-      }
-      return [
-        '[data-tutorial="reinforce-ability"]',
-        '[data-tutorial="abilities-tab"]',
-      ];
-    }
-    if (step === 11) {
       if (activeAbility === 'Airstrike') {
         return ['[data-tutorial="enemy-general"]'];
       }
       return [
         '[data-tutorial="airstrike-ability"]',
+        '[data-tutorial="abilities-tab"]',
+      ];
+    }
+    if (step === 11) {
+      if (activeAbility === 'Reinforce') {
+        return ['[data-tutorial="my-general"]'];
+      }
+      return [
+        '[data-tutorial="reinforce-ability"]',
         '[data-tutorial="abilities-tab"]',
       ];
     }
@@ -478,7 +488,10 @@ export default function InGameTutorial() {
 
   const positionTutorial = useCallback(
     (scrollTarget = false) => {
-      if (!room.isSandbox || dismissed || won) return;
+      if (!room.isSandbox || dismissed || suspended || won) return;
+      if (step >= 6 && step <= 11) {
+        window.dispatchEvent(new CustomEvent('tutorial-open-commander'));
+      }
       const selectors = targetSelectors();
       if (selectors.length === 0) {
         setTargetMissing(false);
@@ -564,12 +577,13 @@ export default function InGameTutorial() {
       setTargetRect(highlight);
       setCardPosition({ ...chosen, width: cardWidth });
     },
-    [dismissed, room.isSandbox, targetSelectors, won]
+    [dismissed, room.isSandbox, step, suspended, targetSelectors, won]
   );
 
   useLayoutEffect(() => {
-    if (!room.isSandbox || dismissed || won) return;
-    positionTutorial();
+    if (!room.isSandbox || dismissed || suspended || won) return;
+    const revealAbilityControl = step >= 8 && step <= 11 && !activeAbility;
+    positionTutorial(revealAbilityControl);
     const delayed = window.setTimeout(() => positionTutorial(), 380);
     const updatePosition = () => positionTutorial();
     const resizeObserver = new ResizeObserver(() => positionTutorial());
@@ -593,7 +607,15 @@ export default function InGameTutorial() {
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [dismissed, positionTutorial, room.isSandbox, step, won]);
+  }, [
+    activeAbility,
+    dismissed,
+    positionTutorial,
+    room.isSandbox,
+    step,
+    suspended,
+    won,
+  ]);
 
   useEffect(() => {
     if (!room.isSandbox) return;
@@ -630,7 +652,12 @@ export default function InGameTutorial() {
     }, STEP_EXIT_ANIMATION_MS);
   };
 
-  if (!room.isSandbox || dismissed || typeof document === 'undefined')
+  if (
+    !room.isSandbox ||
+    dismissed ||
+    suspended ||
+    typeof document === 'undefined'
+  )
     return null;
 
   const current = STEPS[step];
@@ -781,6 +808,14 @@ export default function InGameTutorial() {
             {transitioning && (
               <p className={styles.transitionNotice}>Done — next lesson…</p>
             )}
+            {waitingForAbilityEffect &&
+              !transitioning &&
+              [9, 10, 11].includes(step) && (
+                <p className={styles.effectWaiting}>
+                  {waitingForAbilityEffect} deployed — waiting for its effect to
+                  appear…
+                </p>
+              )}
             {targetMissing && (
               <p className={styles.waiting}>
                 Preparing the highlighted control…
@@ -810,18 +845,14 @@ export default function InGameTutorial() {
               >
                 ← Previous
               </button>
-              <button
-                disabled={step === STEPS.length - 1 || leaving}
-                onClick={() => navigateTutorial(step + 1)}
-              >
-                Next →
-              </button>
-            </div>
-            <div className={styles.secondaryActions}>
-              {hasTarget && (
-                <button onClick={() => positionTutorial(true)}>Show me</button>
+              {!ABILITY_FEEDBACK_STEPS.has(step) && (
+                <button
+                  disabled={step === STEPS.length - 1 || leaving}
+                  onClick={() => navigateTutorial(step + 1)}
+                >
+                  Next →
+                </button>
               )}
-              <button onClick={finishTutorial}>End guide</button>
             </div>
           </>
         )}

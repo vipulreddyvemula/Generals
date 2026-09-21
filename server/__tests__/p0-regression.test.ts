@@ -150,6 +150,7 @@ describe('P3 — socket rate-limit policy coverage', () => {
     'player_message', 'activate_ability', 'force_start', 'change_host',
     'get_room_info', 'get_commander_config',
     'request_math_challenge', 'submit_math_answer',
+    'skip_codeforces_challenge',
   ];
 
   it.each(required)('event "%s" has a rate-limit policy', (event) => {

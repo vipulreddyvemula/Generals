@@ -32,7 +32,8 @@ class Player {
     public codeforcesHandle: string = '',
     public codeforcesSolvedSetReady: boolean = false,
     public abilities: AbilityState[] = [],
-    public challengeCooldownUntilTurn: number = 0
+    public challengeCooldownUntilTurn: number = 0,
+    public codeforcesSkipCount: number = 0
   ) {}
 
   setSpectate(): void {
@@ -60,6 +61,7 @@ class Player {
     this.land = [];
     this.king = null;
     this.patchView = null;
+    this.codeforcesSkipCount = 0;
   }
 
   setRoomHost(value: boolean): void {

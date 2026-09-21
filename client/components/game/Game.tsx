@@ -9,16 +9,21 @@ import InGameTutorial from './InGameTutorial';
 import { useGame, useGameDispatch } from '@/context/GameContext';
 
 export default function Game() {
-  const { room, socketRef, leaderBoardData, myPlayerId } = useGame();
+  const { room, socketRef, leaderBoardData, myPlayerId, openOverDialog } =
+    useGame();
   const { setOpenOverDialog, setDialogContent, setIsSurrendered } =
     useGameDispatch();
   const [isSurrenderDialogOpen, setSurrenderDialogOpen] = useState(false);
+  const [surrenderPending, setSurrenderPending] = useState(false);
 
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket) return;
     const onSurrenderResult = (result: { status: string }) => {
-      if (result.status !== 'ACCEPTED') return;
+      if (result.status !== 'ACCEPTED') {
+        setSurrenderPending(false);
+        return;
+      }
       setIsSurrendered(true);
       setDialogContent([[null], 'game_surrender', null]);
       setOpenOverDialog(true);
@@ -32,6 +37,7 @@ export default function Game() {
   const handleReturnClick = () => setSurrenderDialogOpen(true);
 
   const handleSurrender = () => {
+    setSurrenderPending(true);
     socketRef.current.emit('surrender');
   };
 
@@ -54,7 +60,11 @@ export default function Game() {
           data-tutorial='battlefield'
         >
           <GameMap />
-          <InGameTutorial />
+          <InGameTutorial
+            suspended={
+              isSurrenderDialogOpen || surrenderPending || openOverDialog
+            }
+          />
         </section>
         <aside className='g-game-right'>
           <CommanderPanel />

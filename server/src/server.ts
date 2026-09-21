@@ -36,7 +36,7 @@ import GameMap from './lib/map';
 import MapDiff from './lib/map-diff';
 import GameRecord from './lib/game-record';
 import { MathGenerator } from './lib/commander/math-generator';
-import { addCommanderEnergy, COMMANDER_CONFIG } from './lib/commander/config';
+import { addCommanderEnergy, COMMANDER_CONFIG, getCodeforcesSkipCost } from './lib/commander/config';
 import { CodeforcesCatalogueError, isValidCodeforcesHandle, selectCodeforcesProblem } from './lib/commander/codeforces-catalogue';
 import { codeforcesApiQueue, CodeforcesApiError } from './lib/commander/cf-api-queue';
 import SharedCodeforcesQueue from './lib/commander/shared-codeforces-queue';
@@ -1074,6 +1074,7 @@ io.on('connection', async (socket) => {
         difficulty: COMMANDER_CONFIG.codeforces.difficulty,
         clistBand: COMMANDER_CONFIG.codeforces.clistBand,
       },
+      codeforcesSkipCosts: COMMANDER_CONFIG.codeforces.skipEnergyCosts,
       abilities: COMMANDER_CONFIG.abilities,
     });
   });
@@ -1455,6 +1456,81 @@ io.on('connection', async (socket) => {
       });
   });
 
+  socket.on('skip_codeforces_challenge', (payload?: { assignmentId?: string }) => {
+    if (!room.gameStarted || !room.map) {
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'The match is not active.' });
+      return;
+    }
+
+    const currPlayer = room.players.find((candidate) => candidate.socket_id === socket.id);
+    if (!currPlayer || currPlayer.isDead || currPlayer.disconnected || currPlayer.spectating()) {
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'This player cannot override a challenge.' });
+      return;
+    }
+
+    const assignment = currPlayer.activeCodeforcesChallenge;
+    const queue = room.codeforcesQueue;
+    if (!assignment || !queue || !queue.hasPlayer(currPlayer.id)) {
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'No active Codeforces assignment.' });
+      return;
+    }
+    if (payload?.assignmentId !== assignment.id) {
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'That Codeforces assignment is no longer active.' });
+      return;
+    }
+    if (assignment.verificationInProgress) {
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'Wait for the current verification to finish.' });
+      return;
+    }
+
+    const queuePosition = queue.getPlayerPosition(currPlayer.id);
+    if (queuePosition === null || queuePosition !== assignment.queuePosition) {
+      socket.emit('challenge_error', { source: 'CODEFORCES', message: 'The Codeforces queue is out of sync.' });
+      return;
+    }
+
+    const cost = getCodeforcesSkipCost(currPlayer.codeforcesSkipCount);
+    if (currPlayer.energy < cost) {
+      socket.emit('challenge_error', {
+        source: 'CODEFORCES',
+        message: `Not enough energy to override. Need ${cost}, have ${currPlayer.energy}.`,
+      });
+      return;
+    }
+
+    const nextQueuePosition = queuePosition + 1;
+    try {
+      // Resolve the replacement before changing player state, so an exhausted
+      // catalogue never consumes energy or discards the current assignment.
+      queue.getOrCreateProblem(nextQueuePosition);
+    } catch {
+      socket.emit('challenge_error', {
+        source: 'CODEFORCES',
+        message: 'No replacement Codeforces problem is available in this challenge band.',
+      });
+      return;
+    }
+
+    queue.advancePlayer(currPlayer.id);
+    const nextChallenge = createCodeforcesAssignment(room, currPlayer, nextQueuePosition);
+    if (!nextChallenge) return;
+
+    currPlayer.energy -= cost;
+    currPlayer.codeforcesSkipCount += 1;
+    currPlayer.operatedTurn = room.map.turn;
+    const nextSkipCost = getCodeforcesSkipCost(currPlayer.codeforcesSkipCount);
+    socket.emit('codeforces_challenge_skipped', {
+      challenge: nextChallenge,
+      energy: currPlayer.energy,
+      cost,
+      skipCount: currPlayer.codeforcesSkipCount,
+      nextSkipCost,
+      message: `Challenge overridden for ${cost} energy.`,
+    });
+    socket.emit('energy_update', { energy: currPlayer.energy });
+    io.in(room.id).emit('update_room', room);
+  });
+
   socket.on('activate_ability', (abilityType: AbilityType, target?: Point) => {
     try {
       if (!room || !room.gameStarted || !room.map) return;
@@ -1501,12 +1577,12 @@ io.on('connection', async (socket) => {
       switch (abilityType) {
         case AbilityType.Scout:
           currPlayer.energy -= cost;
-          // Add scout effect to map for 10 turns (5 seconds) with radius 3
+          // Add scout effect to map for 10 turns (5 seconds) with radius 2
           room.map.activeEffects.push({
             type: 'Scout',
             player: currPlayer,
             center: target!,
-            radius: 3,
+            radius: 2,
             expiresAtTurn: room.map.turn + 10,
           });
           socket.emit('ability_activated', {

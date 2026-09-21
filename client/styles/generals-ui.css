@@ -1944,11 +1944,7 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: clamp(210px, 18vw, 260px) minmax(0, 1fr) clamp(
-      340px,
-      27vw,
-      430px
-    );
+  grid-template-columns: clamp(210px, 18vw, 260px) minmax(0, 1fr) auto;
   gap: 16px;
   padding: 16px;
 }
@@ -1966,6 +1962,8 @@
 }
 
 .g-game-right {
+  position: relative;
+  width: clamp(340px, 27vw, 430px);
   min-height: 0;
   min-width: 0;
   display: flex;
@@ -2187,9 +2185,13 @@
 
 @media (max-width: 1100px) {
   .g-game-layout {
-    grid-template-columns: 180px minmax(0, 1fr) 330px;
+    grid-template-columns: 180px minmax(0, 1fr) auto;
     gap: 10px;
     padding: 10px;
+  }
+
+  .g-game-right {
+    width: 330px;
   }
 
   .g-game-topbar {
@@ -2209,6 +2211,10 @@
 
   .g-game-layout {
     grid-template-columns: 1fr;
+  }
+
+  .g-game-right {
+    width: auto;
   }
 
   .g-game-left {

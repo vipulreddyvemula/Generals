@@ -26,13 +26,20 @@ export const COMMANDER_CONFIG = {
     solvedHistoryCacheMs: 60 * 60 * 1000,
     verificationSubmissionCount: 25,
     maxQueueSize: 256,
+    skipEnergyCosts: [10, 20, 30] as const,
   },
   abilities: {
     Scout: { energy: 20 },
-    Reinforce: { energy: 40, troops: 40 },
-    Airstrike: { energy: 60 },
+    Airstrike: { energy: 40 },
+    Reinforce: { energy: 50, troops: 40 },
   },
 } as const;
+
+export function getCodeforcesSkipCost(completedSkips: number): number {
+  const costs = COMMANDER_CONFIG.codeforces.skipEnergyCosts;
+  const safeCount = Number.isInteger(completedSkips) && completedSkips > 0 ? completedSkips : 0;
+  return costs[Math.min(safeCount, costs.length - 1)];
+}
 
 export function addCommanderEnergy(current: number, reward: number, maxEnergyOverride?: number): number {
   return Math.min(maxEnergyOverride ?? COMMANDER_CONFIG.maxEnergy, Math.max(0, current) + Math.max(0, reward));
