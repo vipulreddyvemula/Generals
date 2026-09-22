@@ -449,6 +449,19 @@ function GameMap() {
     return () => {};
   }, [mapRef, handleTouchStart, handleTouchMove, handleTouchEnd]);
 
+  // Mouse-wheel zoom on the battlefield container (desktop)
+  useEffect(() => {
+    const battlefield = mapRef.current?.parentElement;
+    if (!battlefield) return;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setZoom((z) => Math.min(Math.max(z + delta, 0.2), 4.0));
+    };
+    battlefield.addEventListener('wheel', handleWheel, { passive: false });
+    return () => battlefield.removeEventListener('wheel', handleWheel);
+  }, [mapRef, setZoom]);
+
   return (
     <div className={airstrikeExploding ? 'map-shake' : ''}>
       <div
@@ -534,6 +547,76 @@ function GameMap() {
         {/* Render abilities over the map */}
         <AirstrikeEffect zoom={zoom} tileSize={tileSize} onExploding={setAirstrikeExploding} />
       </div>
+      {/* Zoom controls — always visible, bottom-right corner */}
+      <Box
+        sx={{
+          position: 'absolute',
+          bottom: 12,
+          right: 12,
+          zIndex: 20,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '2px',
+        }}
+      >
+        <Box
+          component='button'
+          onClick={() => setZoom((z) => Math.min(z + 0.15, 4.0))}
+          aria-label='Zoom in'
+          title='Zoom in (scroll up)'
+          sx={{
+            width: 28,
+            height: 28,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(7,19,29,0.88)',
+            border: '1px solid rgba(217,183,101,0.45)',
+            borderRadius: '4px 4px 0 0',
+            color: 'rgba(217,183,101,0.85)',
+            fontSize: 18,
+            lineHeight: 1,
+            cursor: 'pointer',
+            p: 0,
+            transition: 'background 0.15s, color 0.15s',
+            '&:hover': {
+              background: 'rgba(217,183,101,0.12)',
+              color: 'var(--g-gold)',
+            },
+          }}
+        >
+          +
+        </Box>
+        <Box
+          component='button'
+          onClick={() => setZoom((z) => Math.max(z - 0.15, 0.2))}
+          aria-label='Zoom out'
+          title='Zoom out (scroll down)'
+          sx={{
+            width: 28,
+            height: 28,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(7,19,29,0.88)',
+            border: '1px solid rgba(217,183,101,0.45)',
+            borderTop: 'none',
+            borderRadius: '0 0 4px 4px',
+            color: 'rgba(217,183,101,0.85)',
+            fontSize: 20,
+            lineHeight: 1,
+            cursor: 'pointer',
+            p: 0,
+            transition: 'background 0.15s, color 0.15s',
+            '&:hover': {
+              background: 'rgba(217,183,101,0.12)',
+              color: 'var(--g-gold)',
+            },
+          }}
+        >
+          −
+        </Box>
+      </Box>
       {isSmallScreen && (
         <Box
           className='menu-container'

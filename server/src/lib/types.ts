@@ -128,6 +128,7 @@ export class Room {
   public commanderDifficultyMode: 'CLIST_BAND' | 'CF_RATING' = 'CLIST_BAND';
   public commanderClistTier: number = 0;
   public commanderCodeforcesRating: number = 800;
+  public createdAt: number = Date.now();
 
   constructor(
     public id: string,

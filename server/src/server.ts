@@ -201,6 +201,19 @@ const metricsTimer = setInterval(() => {
 }, 15_000);
 metricsTimer.unref();
 
+const gcTimer = setInterval(() => {
+  const now = Date.now();
+  for (const roomId in roomPool) {
+    const room = roomPool[roomId];
+    if (room && room.players.length === 0 && !room.keepAlive) {
+      if (now - room.createdAt > 120_000) {
+        delete roomPool[roomId];
+      }
+    }
+  }
+}, 120_000);
+gcTimer.unref();
+
 app.get('/health', (_req, res) => {
   res.json(eventMetrics.snapshot(roomPool, io.sockets.sockets.size));
 });
