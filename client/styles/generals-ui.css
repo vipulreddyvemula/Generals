@@ -1747,22 +1747,22 @@
 .g-game-topbar {
   position: relative;
   z-index: 30;
-  flex: 0 0 72px;
-  height: 72px;
-  padding: 0 16px;
+  flex: 0 0 64px;
+  height: 64px;
+  padding: 0 20px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(170px, 230px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  border-bottom: 1px solid rgba(217, 183, 101, 0.4);
-  background: rgba(7, 19, 29, 0.95);
-  box-shadow: 0 7px 28px #0005;
+  border-bottom: 1px solid rgba(217, 183, 101, 0.35);
+  background: rgba(5, 14, 22, 0.97);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
 }
 
+/* ── Left ── */
 .g-game-top-left {
   display: flex;
   align-items: center;
   min-width: 0;
-  gap: 20px;
 }
 
 .g-game-brand {
@@ -1773,35 +1773,186 @@
 }
 
 .g-game-brand svg {
-  width: 39px;
-  height: 33px;
+  width: 36px;
+  height: 30px;
   flex: 0 0 auto;
 }
 
 .g-game-top-left .g-brand {
-  font-size: 29px;
+  font-size: 26px;
 }
 
-.g-game-room-meta {
-  padding: 6px 12px;
+/* ── Clock (center) ── */
+.g-game-clock {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 28px;
+  height: 60px;
+  border-left: 1px solid rgba(217, 183, 101, 0.5);
+  border-right: 1px solid rgba(217, 183, 101, 0.5);
+  border-bottom: 1px solid rgba(217, 183, 101, 0.5);
+  background: rgba(3, 10, 18, 0.6);
+  gap: 1px;
+}
+
+.g-game-clock::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  height: 8px;
+  width: 8px;
+  transform: rotate(45deg);
+  border-right: 1px solid rgba(217, 183, 101, 0.5);
+  border-bottom: 1px solid rgba(217, 183, 101, 0.5);
+  background: rgba(5, 14, 22, 0.97);
+}
+
+.g-game-clock-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: rgba(217, 183, 101, 0.55);
+}
+
+.g-game-clock strong {
+  color: #7aaaff;
+  font-size: 22px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* ── Right ── */
+.g-game-top-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.g-game-status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px;
   border: 1px solid var(--g-border);
   border-radius: 5px;
-  background: #07131d88;
-  white-space: nowrap;
-  font-size: 12px;
+  background: rgba(6, 19, 30, 0.7);
 }
 
-.g-game-room-meta button {
-  margin-left: 4px;
+.g-game-status > span:last-child {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--g-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.g-game-status svg {
+  color: var(--g-green);
+  font-size: 16px;
+}
+
+.g-icon-button {
+  min-height: 38px;
+  min-width: 38px;
   padding: 0;
-  vertical-align: middle;
+}
+
+.g-game-top-right > .g-button {
+  min-height: 38px;
+}
+
+.g-game-top-right > .g-button svg {
+  font-size: 18px;
+}
+
+/* "How to Play" text button */
+.g-htp-button {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em;
+  padding: 0 14px !important;
+  white-space: nowrap;
+}
+
+/* Settings popover */
+.g-match-settings-wrap {
+  position: relative;
+}
+
+.g-match-settings-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: 220px;
+  padding: 14px;
+  border: 1px solid var(--g-border);
+  border-radius: 6px;
+  background: var(--g-panel-strong);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  font-size: 12px;
+  z-index: 100;
+}
+
+.g-match-settings-popover > b {
+  display: block;
+  font:
+    700 12px Cinzel,
+    serif;
+  color: var(--g-gold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--g-border);
+}
+
+.g-settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.g-settings-row:last-child {
+  border-bottom: none;
+}
+
+.g-settings-label {
+  color: var(--g-muted);
+  font-size: 11px;
+}
+
+.g-settings-value {
+  color: #eef4f6;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Copy button inside settings */
+.g-settings-copy {
+  padding: 0;
   border: 0;
   background: none;
   color: var(--g-muted);
+  cursor: pointer;
+  vertical-align: middle;
+  line-height: 1;
 }
 
-.g-game-room-meta button svg {
-  font-size: 15px;
+.g-settings-copy svg {
+  font-size: 14px;
+  vertical-align: middle;
 }
 
 @keyframes g-pop-in {
@@ -1813,129 +1964,6 @@
 .g-copied svg {
   animation: g-pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
   color: #4caf50;
-}
-
-.g-game-room-meta small {
-  display: block;
-  color: var(--g-muted);
-  font-size: 10px;
-}
-
-.g-game-room-meta small span {
-  margin: 0 7px;
-}
-
-.g-game-clock {
-  position: relative;
-  display: flex;
-  height: 68px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border-left: 1px solid var(--g-gold);
-  border-right: 1px solid var(--g-gold);
-  border-bottom: 1px solid var(--g-gold);
-  background: rgba(3, 12, 21, 0.6);
-}
-
-.g-game-clock::after {
-  content: '';
-  position: absolute;
-  bottom: -5px;
-  height: 8px;
-  width: 8px;
-  transform: rotate(45deg);
-  border-right: 1px solid var(--g-gold);
-  border-bottom: 1px solid var(--g-gold);
-  background: #07131d;
-}
-
-.g-game-clock b {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font:
-    700 17px Cinzel,
-    serif;
-}
-
-.g-game-clock b svg {
-  color: var(--g-gold);
-  font-size: 18px;
-}
-
-.g-game-clock strong {
-  color: #7aaaff;
-  font-size: 20px;
-  font-variant-numeric: tabular-nums;
-}
-
-.g-game-top-right {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  min-width: 0;
-}
-
-.g-game-status {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 10px 13px;
-  border: 1px solid var(--g-border);
-  border-radius: 5px;
-  background: #06131e8c;
-}
-
-.g-game-status > span:last-child {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--g-muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.g-game-status svg {
-  color: var(--g-green);
-  font-size: 17px;
-}
-
-.g-icon-button {
-  min-height: 42px;
-  min-width: 42px;
-  padding: 0;
-}
-
-.g-game-top-right > .g-button {
-  min-height: 42px;
-}
-
-.g-game-top-right > .g-button svg {
-  font-size: 19px;
-}
-
-.g-match-settings-wrap {
-  position: relative;
-}
-
-.g-match-settings-popover {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 9px);
-  width: 230px;
-  padding: 13px;
-  border: 1px solid var(--g-border);
-  border-radius: 5px;
-  background: var(--g-panel-strong);
-  box-shadow: 0 15px 30px #0008;
-  font-size: 12px;
-}
-
-.g-match-settings-popover p {
-  margin: 7px 0 0;
-  color: var(--g-muted);
 }
 
 .g-game-layout {

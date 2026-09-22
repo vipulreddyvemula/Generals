@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
-import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import CheckIcon from '@mui/icons-material/Check';
+import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
-import HourglassEmptyOutlinedIcon from '@mui/icons-material/HourglassEmptyOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import SignalCellularAltIcon from '@mui/icons-material/SignalCellularAlt';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { Brand, CrownMark, HowToPlayModal, Status } from '@/components/GeneralsUi';
 import { useGame } from '@/context/GameContext';
 import { copyToClipboard } from '@/lib/utils';
@@ -18,26 +16,26 @@ export default function GameTopBar({
   onSurrender: () => void;
 }) {
   const { room, turnsCount, initGameInfo, socketRef, isSurrendered, myPlayerId, team, roomUiStatus } = useGame();
-  
+
   const isDead = room?.players?.find((p) => p.id === myPlayerId)?.isDead || false;
-  
+
   const showExitButton =
     isSurrendered ||
     isDead ||
     team === MaxTeamNum + 1 ||
     roomUiStatus === RoomUiStatus.gameOverConfirm;
+
   const [ping, setPing] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [htpOpen, setHtpOpen] = useState(false);
+
   useEffect(() => {
     let alive = true;
     const check = async () => {
       const started = performance.now();
       try {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_SERVER_API}/ping`
-        );
+        const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_API}/ping`);
         if (!response.ok) throw new Error('Offline');
         if (alive) setPing(Math.round(performance.now() - started));
       } catch {
@@ -46,16 +44,25 @@ export default function GameTopBar({
     };
     check();
     const timer = window.setInterval(check, 5000);
-    return () => {
-      alive = false;
-      window.clearInterval(timer);
-    };
+    return () => { alive = false; window.clearInterval(timer); };
   }, []);
-  const elapsedSeconds = Math.max(
-    0,
-    Math.floor((turnsCount * 0.5) / (room.gameSpeed || 1))
-  );
-  const clock = `${String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:${String(elapsedSeconds % 60).padStart(2, '0')}`;
+
+  // Close settings popover when clicking outside
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Element;
+      if (!target.closest('.g-match-settings-wrap')) setSettingsOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [settingsOpen]);
+
+  const elapsedSeconds = Math.max(0, Math.floor((turnsCount * 0.5) / (room.gameSpeed || 1)));
+  const minutes = Math.floor(elapsedSeconds / 60);
+  const secs = elapsedSeconds % 60;
+  const clock = `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
   const copyCode = async () => {
     const success = await copyToClipboard(room.id);
     if (success) {
@@ -65,81 +72,99 @@ export default function GameTopBar({
       setCopied(false);
     }
   };
+
   return (
     <>
-    <header className='g-game-topbar'>
-      <div className='g-game-top-left'>
-        <div className='g-game-brand'>
-          <CrownMark />
-          <Brand />
-        </div>
-        <div className='g-game-room-meta'>
-          <div>
-            Room: {room.roomName}{' '}
-            <button onClick={copyCode} aria-label='Copy room code' className={copied ? 'g-copied' : ''}>
-              {copied ? <CheckIcon /> : <ContentCopyOutlinedIcon />}
-            </button>
+      <header className='g-game-topbar'>
+        {/* Left — brand only */}
+        <div className='g-game-top-left'>
+          <div className='g-game-brand'>
+            <CrownMark />
+            <Brand />
           </div>
-          <small>
-            Map:{' '}
-            {initGameInfo
-              ? `${initGameInfo.mapWidth} × ${initGameInfo.mapHeight}`
-              : '—'}{' '}
-            <span>|</span> Speed: {room.gameSpeed}×
-          </small>
         </div>
-      </div>
-      <div className='g-game-clock'>
-        <b>
-          <HourglassEmptyOutlinedIcon />
-          Turn {Math.floor(turnsCount / 2)}
-        </b>
-        <strong>{clock}</strong>
-      </div>
-      <div className='g-game-top-right'>
-        <div className='g-game-status'>
-          <Status online={socketRef.current?.connected && ping !== null} />
-          <span>
-            <SignalCellularAltIcon />
-            {ping === null ? '—' : `${ping} ms`}
-          </span>
+
+        {/* Center — elapsed time only */}
+        <div className='g-game-clock'>
+          <small className='g-game-clock-label'>ELAPSED</small>
+          <strong>{clock}</strong>
         </div>
-        <div className='g-match-settings-wrap'>
+
+        {/* Right — status, settings, how to play, surrender */}
+        <div className='g-game-top-right'>
+          <div className='g-game-status'>
+            <Status online={socketRef.current?.connected && ping !== null} />
+            <span>
+              <SignalCellularAltIcon />
+              {ping === null ? '—' : `${ping} ms`}
+            </span>
+          </div>
+
+          {/* Settings — contains all room meta */}
+          <div className='g-match-settings-wrap'>
+            <button
+              className='g-button g-button-outline g-icon-button'
+              onClick={() => setSettingsOpen((o) => !o)}
+              aria-label='Match settings'
+              title='Settings'
+            >
+              <SettingsOutlinedIcon />
+            </button>
+            {settingsOpen && (
+              <div className='g-match-settings-popover'>
+                <b>Match Settings</b>
+                <div className='g-settings-row'>
+                  <span className='g-settings-label'>Room</span>
+                  <span className='g-settings-value'>
+                    {room.roomName}
+                    <button
+                      onClick={copyCode}
+                      aria-label='Copy room code'
+                      className={`g-settings-copy${copied ? ' g-copied' : ''}`}
+                    >
+                      {copied ? <CheckIcon /> : <ContentCopyOutlinedIcon />}
+                    </button>
+                  </span>
+                </div>
+                <div className='g-settings-row'>
+                  <span className='g-settings-label'>Map</span>
+                  <span className='g-settings-value'>
+                    {initGameInfo ? `${initGameInfo.mapWidth} × ${initGameInfo.mapHeight}` : '—'}
+                  </span>
+                </div>
+                <div className='g-settings-row'>
+                  <span className='g-settings-label'>Speed</span>
+                  <span className='g-settings-value'>{room.gameSpeed}×</span>
+                </div>
+                <div className='g-settings-row'>
+                  <span className='g-settings-label'>Players</span>
+                  <span className='g-settings-value'>{room.players.length}/{room.maxPlayers}</span>
+                </div>
+                <div className='g-settings-row'>
+                  <span className='g-settings-label'>Fog</span>
+                  <span className='g-settings-value'>{room.fogOfWar ? 'On' : 'Off'}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* How to Play — text label visible */}
           <button
-            className='g-button g-button-outline g-icon-button'
-            onClick={() => setSettingsOpen((open) => !open)}
-            aria-label='Match settings'
+            className='g-button g-button-outline g-htp-button'
+            onClick={() => setHtpOpen(true)}
+            aria-label='How to Play'
           >
-            <SettingsOutlinedIcon />
+            How to Play
           </button>
-          {settingsOpen && (
-            <div className='g-match-settings-popover'>
-              <b>Match settings</b>
-              <p>
-                Room {room.id} · {room.players.length}/{room.maxPlayers} players
-              </p>
-              <p>
-                Speed {room.gameSpeed}× ·{' '}
-                {room.fogOfWar ? 'Fog of War' : 'Visible map'}
-              </p>
-            </div>
-          )}
+
+          {/* Surrender / Exit */}
+          <button className='g-button g-button-danger' onClick={onSurrender}>
+            <FlagOutlinedIcon />
+            {showExitButton ? 'Exit' : 'Surrender'}
+          </button>
         </div>
-        <button
-          className='g-button g-button-outline g-icon-button'
-          onClick={() => setHtpOpen(true)}
-          aria-label='How to Play'
-          title='How to Play'
-        >
-          <HelpOutlineIcon />
-        </button>
-        <button className='g-button g-button-danger' onClick={onSurrender}>
-          <FlagOutlinedIcon />
-          {showExitButton ? 'Exit' : 'Surrender'}
-        </button>
-      </div>
-    </header>
-    <HowToPlayModal open={htpOpen} onClose={() => setHtpOpen(false)} />
+      </header>
+      <HowToPlayModal open={htpOpen} onClose={() => setHtpOpen(false)} />
     </>
   );
 }
