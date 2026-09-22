@@ -30,6 +30,7 @@ import {
   ChallengeState,
   CodeforcesChallengeState,
 } from '@/lib/types';
+import ResultBanner, { ResultBannerPayload } from './ResultBanner';
 
 const acceptedPulse = keyframes`
   0% { box-shadow: 0 0 0 rgba(47, 230, 166, 0); }
@@ -108,15 +109,6 @@ const ghostBtnSx = {
     color: '#eef4f6',
   },
   transition: 'all 0.18s',
-};
-
-type ResultBanner = {
-  source: 'MATH' | 'CODEFORCES';
-  tone: 'success' | 'error' | 'info';
-  title: string;
-  message: string;
-  rewardEnergy?: number;
-  rewardTroops?: number;
 };
 
 type CfStatus =
@@ -199,7 +191,9 @@ export default function CommanderPanel() {
   const acceptedTransitionRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
-  const [banner, setBanner] = useState<ResultBanner | null>(null);
+  const [mathBanner, setMathBanner] = useState<ResultBannerPayload | null>(null);
+  const [cfBanner, setCfBanner] = useState<ResultBannerPayload | null>(null);
+  const [abilityBanner, setAbilityBanner] = useState<ResultBannerPayload | null>(null);
   const [commanderConfig, setCommanderConfig] =
     useState<CommanderPublicConfig | null>(null);
   const [activeTab, setActiveTab] = useState<'CHALLENGES' | 'ABILITIES'>(
@@ -251,11 +245,30 @@ export default function CommanderPanel() {
       window.removeEventListener('tutorial-open-commander', openForTutorial);
   }, []);
 
-  const mathCooldown = Boolean(
-    currentPlayer &&
-      room?.map &&
-      currentPlayer.challengeCooldownUntilTurn > room.map.turn
-  );
+  // Compute cooldown in seconds (1 turn ≈ 500 ms at default speed)
+  const TURN_MS = 500 / (room?.gameSpeed ?? 1);
+  const mathCooldownTurns =
+    currentPlayer && room?.map
+      ? Math.max(0, currentPlayer.challengeCooldownUntilTurn - room.map.turn)
+      : 0;
+  const [mathCooldownSecs, setMathCooldownSecs] = useState(0);
+
+  // Whenever the server updates cooldownTurns, seed a real wall-clock countdown
+  useEffect(() => {
+    const secs = Math.ceil((mathCooldownTurns * TURN_MS) / 1000);
+    setMathCooldownSecs(secs);
+    if (secs <= 0) return;
+    const id = setInterval(() => {
+      setMathCooldownSecs((s) => {
+        if (s <= 1) { clearInterval(id); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mathCooldownTurns]);
+
+  const mathCooldown = mathCooldownSecs > 0;
 
   useEffect(() => {
     if (!currentPlayer) return;
@@ -279,13 +292,13 @@ export default function CommanderPanel() {
     const onMathChallenge = (challenge: ChallengeState) => {
       setMathChallenge(challenge);
       setMathAnswer('');
-      setBanner(null);
+      setMathBanner(null);
     };
     const onMathResult = (result: any) => {
       if (result.status === 'SOLVED') {
         setEnergy(result.energy);
         setMathChallenge(null);
-        setBanner({
+        setMathBanner({
           source: 'MATH',
           tone: 'success',
           title: 'SOLVED',
@@ -295,7 +308,7 @@ export default function CommanderPanel() {
         });
       } else {
         if (result.status !== 'ERROR') setMathChallenge(null);
-        setBanner({
+        setMathBanner({
           source: 'MATH',
           tone: 'error',
           title:
@@ -324,7 +337,7 @@ export default function CommanderPanel() {
       setCodeforcesChallenge(challenge);
       setCfStatus('WAITING FOR SUBMISSION');
       setCfQueueExhausted(false);
-      setBanner(null);
+      setCfBanner(null);
     };
     const onVerifyPending = () => setCfStatus('VERIFYING');
     const onCfSkipped = (result: {
@@ -339,7 +352,7 @@ export default function CommanderPanel() {
       setCodeforcesChallenge(result.challenge);
       setCfStatus('WAITING FOR SUBMISSION');
       setCfQueueExhausted(false);
-      setBanner({
+      setCfBanner({
         source: 'CODEFORCES',
         tone: 'info',
         title: 'OVERRIDE COMPLETE',
@@ -350,7 +363,7 @@ export default function CommanderPanel() {
       if (result.status === 'ACCEPTED') {
         setEnergy(result.energy);
         setCfStatus('ACCEPTED');
-        setBanner({
+        setCfBanner({
           source: 'CODEFORCES',
           tone: 'success',
           title: 'ACCEPTED',
@@ -375,7 +388,7 @@ export default function CommanderPanel() {
       } else if (result.status === 'EXPIRED') {
         setCfStatus('EXPIRED');
         setCodeforcesChallenge(null);
-        setBanner({
+        setCfBanner({
           source: 'CODEFORCES',
           tone: 'error',
           title: 'EXPIRED',
@@ -383,7 +396,7 @@ export default function CommanderPanel() {
         });
       } else if (result.status === 'ERROR') {
         setCfStatus('ERROR');
-        setBanner({
+        setCfBanner({
           source: 'CODEFORCES',
           tone: 'error',
           title: 'VERIFICATION ERROR',
@@ -391,7 +404,7 @@ export default function CommanderPanel() {
         });
       } else if (result.status === 'ALREADY_REWARDED') {
         setCfStatus('ACCEPTED');
-        setBanner({
+        setCfBanner({
           source: 'CODEFORCES',
           tone: 'info',
           title: 'ALREADY REWARDED',
@@ -399,7 +412,7 @@ export default function CommanderPanel() {
         });
       } else {
         setCfStatus('NOT ACCEPTED');
-        setBanner({
+        setCfBanner({
           source: 'CODEFORCES',
           tone: 'info',
           title: 'NOT SOLVED YET',
@@ -411,7 +424,7 @@ export default function CommanderPanel() {
       setCodeforcesChallenge(null);
       setCfQueueExhausted(true);
       setCfStatus('ERROR');
-      setBanner({
+      setCfBanner({
         source: 'CODEFORCES',
         tone: 'info',
         title: 'NO MORE PROBLEMS',
@@ -437,12 +450,21 @@ export default function CommanderPanel() {
                 : current
         );
       }
-      setBanner({
-        source: result.source,
-        tone: 'error',
-        title: 'ACTION FAILED',
-        message: result.message,
-      });
+      if (result.source === 'MATH') {
+        setMathBanner({
+          source: 'MATH',
+          tone: 'error',
+          title: 'ACTION FAILED',
+          message: result.message,
+        });
+      } else {
+        setCfBanner({
+          source: 'CODEFORCES',
+          tone: 'error',
+          title: 'ACTION FAILED',
+          message: result.message,
+        });
+      }
     };
     const onExpired = (result: {
       source: 'MATH' | 'CODEFORCES';
@@ -453,12 +475,21 @@ export default function CommanderPanel() {
         setCodeforcesChallenge(null);
         setCfStatus('EXPIRED');
       }
-      setBanner({
-        source: result.source,
-        tone: 'error',
-        title: 'EXPIRED',
-        message: result.message,
-      });
+      if (result.source === 'MATH') {
+        setMathBanner({
+          source: 'MATH',
+          tone: 'error',
+          title: 'EXPIRED',
+          message: result.message,
+        });
+      } else {
+        setCfBanner({
+          source: 'CODEFORCES',
+          tone: 'error',
+          title: 'EXPIRED',
+          message: result.message,
+        });
+      }
     };
     const onAbilityActivated = ({
       abilityType,
@@ -469,7 +500,7 @@ export default function CommanderPanel() {
     }) => {
       setEnergy(nextEnergy);
       setActiveAbility(null);
-      setBanner({
+      setAbilityBanner({
         source: 'MATH',
         tone: 'success',
         title: `${abilityType.toUpperCase()} DEPLOYED`,
@@ -481,7 +512,7 @@ export default function CommanderPanel() {
     };
     const onAbilityFailed = (message: string) => {
       setActiveAbility(null);
-      setBanner({
+      setAbilityBanner({
         source: 'MATH',
         tone: 'error',
         title: 'ABILITY FAILED',
@@ -582,28 +613,13 @@ export default function CommanderPanel() {
   };
   const activateAbility = (type: AbilityType) => {
     setActiveAbility(type);
-    setBanner({
+    setAbilityBanner({
       source: 'MATH',
       tone: 'info',
       title: `${type.toUpperCase()} TARGETING`,
-      message:
-        'Select a valid tile on the battlefield. Press Escape to cancel.',
+      message: 'Select a valid tile on the battlefield.',
     });
   };
-
-  const toneColor =
-    banner?.tone === 'success'
-      ? 'var(--g-green)'
-      : banner?.tone === 'error'
-        ? 'var(--g-red)'
-        : '#51d9ff';
-
-  const bannerBg =
-    banner?.tone === 'success'
-      ? 'rgba(69,217,146,.07)'
-      : banner?.tone === 'error'
-        ? 'rgba(229,81,85,.07)'
-        : 'rgba(81,217,255,.07)';
 
   const cfPlayerReady = Boolean(
     cfQueueStatus?.readyPlayerIds.includes(myPlayerId)
@@ -983,8 +999,13 @@ export default function CommanderPanel() {
                         disableElevation
                         sx={blueBtnSx}
                       >
-                        {mathCooldown ? 'Recharging' : 'Get Math Challenge'}
+                        {mathCooldown ? `Cooldown · ${mathCooldownSecs}s` : 'Get Math Challenge'}
                       </Button>
+                    </Box>
+                  )}
+                  {mathBanner && (
+                    <Box sx={{ mt: 1.5 }}>
+                      <ResultBanner banner={mathBanner} onDismiss={() => setMathBanner(null)} />
                     </Box>
                   )}
                 </Box>
@@ -1226,60 +1247,13 @@ export default function CommanderPanel() {
                       )}
                     </>
                   )}
-                </Box>
-              </>
-            )}
-
-            {/* Result Banner */}
-            {banner && (
-              <Box
-                role='status'
-                sx={{
-                  borderLeft: `3px solid ${toneColor}`,
-                  background: bannerBg,
-                  borderRadius: '0 5px 5px 0',
-                  px: 1.5,
-                  py: 1,
-                  animation:
-                    banner.tone === 'success'
-                      ? `${acceptedPulse} 1.1s ease-out`
-                      : 'none',
-                }}
-              >
-                <Box
-                  sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: 1,
-                  }}
-                >
-                  <Typography
-                    sx={{
-                      fontSize: 11,
-                      fontWeight: 900,
-                      letterSpacing: 1,
-                      color: toneColor,
-                    }}
-                  >
-                    ✓ {banner.title}
-                  </Typography>
-                  {banner.rewardEnergy && (
-                    <Typography
-                      sx={{ fontSize: 11, fontWeight: 900, color: toneColor }}
-                    >
-                      +{banner.rewardEnergy} ENERGY
-                    </Typography>
+                  {cfBanner && (
+                    <Box sx={{ mt: 1.5 }}>
+                      <ResultBanner banner={cfBanner} onDismiss={() => setCfBanner(null)} />
+                    </Box>
                   )}
                 </Box>
-                <Typography
-                  sx={{ fontSize: 12, color: 'var(--g-muted)', mt: 0.25 }}
-                >
-                  {banner.message}
-                  {banner.rewardTroops
-                    ? ` · +${banner.rewardTroops} troops`
-                    : ''}
-                </Typography>
-              </Box>
+              </>
             )}
 
             {/* Abilities Tab */}
@@ -1451,20 +1425,24 @@ export default function CommanderPanel() {
                     </Box>
                   );
                 })}
+                {/* Cancel Targeting — only shown inside Abilities tab while targeting is active */}
+                {activeAbility && (
+                  <Button
+                    onClick={() => { setActiveAbility(null); setAbilityBanner(null); }}
+                    disableRipple
+                    disableElevation
+                    sx={ghostBtnSx}
+                  >
+                    CANCEL {activeAbility.toUpperCase()} TARGETING
+                  </Button>
+                )}
+                {/* Ability result / targeting banner */}
+                {abilityBanner && (
+                  <ResultBanner banner={abilityBanner} onDismiss={() => setAbilityBanner(null)} />
+                )}
               </Box>
             )}
 
-            {/* Cancel Targeting */}
-            {activeAbility && (
-              <Button
-                onClick={() => setActiveAbility(null)}
-                disableRipple
-                disableElevation
-                sx={ghostBtnSx}
-              >
-                CANCEL {activeAbility.toUpperCase()} TARGETING
-              </Button>
-            )}
           </>
         )}
       </Box>

@@ -123,7 +123,7 @@ app.get('/create_sandbox', async (req: Request, res: Response) => {
       room.city = 0;
       room.swamp = 0;
       room.revealKing = true;
-      room.keepAlive = true;
+      room.keepAlive = false;
       addDummyBotToRoom(room);
     }
     res.status(200).json(result);
@@ -601,8 +601,8 @@ function handleGame(room: Room, io: Server): void {
                   captor.winLand(capturedKingBlock);
                 }
                 if (!room.codeforcesQueue) tryInitializeCodeforcesQueue(room, io);
-              } else if (!player.disconnected && gameMap.turn - player.lastMoveTurn >= 2000) {
-                // AFK: no movement for 2000 turns.
+              } else if (!player.disconnected && gameMap.turn - player.lastMoveTurn >= 4000) {
+                // AFK: no movement for 4000 turns.
                 // lastMoveTurn is updated exclusively by the attack handler.
                 neutralizePlayer(room, player);
                 if (!room.codeforcesQueue) tryInitializeCodeforcesQueue(room, io);

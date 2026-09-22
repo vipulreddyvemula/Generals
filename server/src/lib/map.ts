@@ -73,6 +73,13 @@ class GameMap {
       name: this.name,
       width: this.width,
       height: this.height,
+      turn: this.turn,
+      activeEffects: this.activeEffects.map(effect => ({
+        type: effect.type,
+        center: effect.center,
+        radius: effect.radius,
+        expiresAtTurn: effect.expiresAtTurn,
+      })),
     };
   }
 

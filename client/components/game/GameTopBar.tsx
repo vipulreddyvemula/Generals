@@ -9,13 +9,23 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { Brand, CrownMark, HowToPlayModal, Status } from '@/components/GeneralsUi';
 import { useGame } from '@/context/GameContext';
 import { copyToClipboard } from '@/lib/utils';
+import { RoomUiStatus } from '@/lib/types';
+import { MaxTeamNum } from '@/lib/constants';
 
 export default function GameTopBar({
   onSurrender,
 }: {
   onSurrender: () => void;
 }) {
-  const { room, turnsCount, initGameInfo, socketRef } = useGame();
+  const { room, turnsCount, initGameInfo, socketRef, isSurrendered, myPlayerId, team, roomUiStatus } = useGame();
+  
+  const isDead = room?.players?.find((p) => p.id === myPlayerId)?.isDead || false;
+  
+  const showExitButton =
+    isSurrendered ||
+    isDead ||
+    team === MaxTeamNum + 1 ||
+    roomUiStatus === RoomUiStatus.gameOverConfirm;
   const [ping, setPing] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -125,7 +135,7 @@ export default function GameTopBar({
         </button>
         <button className='g-button g-button-danger' onClick={onSurrender}>
           <FlagOutlinedIcon />
-          Surrender
+          {showExitButton ? 'Exit' : 'Surrender'}
         </button>
       </div>
     </header>

@@ -1,5 +1,6 @@
 import '../styles/globals.css';
 import '../styles/generals-ui.css';
+import '../styles/notifications.css';
 import 'katex/dist/katex.min.css';
 import type { AppProps } from 'next/app';
 import { appWithTranslation } from 'next-i18next';

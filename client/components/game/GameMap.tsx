@@ -25,6 +25,8 @@ import {
   useState,
 } from 'react';
 import MapTile from './MapTile';
+import AirstrikeEffect from './AirstrikeEffect';
+
 function GameMap() {
   const {
     attackQueueRef,
@@ -42,6 +44,7 @@ function GameMap() {
   const { t } = useTranslation();
 
   const isSmallScreen = useMediaQuery('(max-width:600px)');
+  const [airstrikeExploding, setAirstrikeExploding] = useState(false);
 
   const touchAttacking = useRef(false);
   const lastTouchPosition = useRef({ x: -1, y: -1 });
@@ -447,7 +450,7 @@ function GameMap() {
   }, [mapRef, handleTouchStart, handleTouchMove, handleTouchEnd]);
 
   return (
-    <div>
+    <div className={airstrikeExploding ? 'map-shake' : ''}>
       <div
         ref={mapRef}
         data-tutorial='map-board'
@@ -464,7 +467,8 @@ function GameMap() {
           transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px)`,
           width: mapPixelHeight, // game's width and height are swapped
           height: mapPixelWidth,
-          outline: 'none',
+          outline: '2px solid rgba(217,183,101,0.7)',
+          outlineOffset: '2px',
         }}
       >
         {/* map key (x,y) example */}
@@ -526,6 +530,9 @@ function GameMap() {
             );
           });
         })}
+
+        {/* Render abilities over the map */}
+        <AirstrikeEffect zoom={zoom} tileSize={tileSize} onExploding={setAirstrikeExploding} />
       </div>
       {isSmallScreen && (
         <Box

@@ -23,7 +23,7 @@ export default function SurrenderDialog({
   setOpen: any;
   handleSurrender: () => void;
 }) {
-  const { openOverDialog, isSurrendered, team, roomUiStatus } = useGame();
+  const { openOverDialog, isSurrendered, team, roomUiStatus, room, myPlayerId } = useGame();
   const { t } = useTranslation();
   const router = useRouter();
 
@@ -44,8 +44,11 @@ export default function SurrenderDialog({
     [isOpen, openOverDialog, setOpen]
   );
 
+  const isDead = room?.players?.find((p) => p.id === myPlayerId)?.isDead || false;
+
   const showExitTitle =
     isSurrendered ||
+    isDead ||
     team === MaxTeamNum + 1 ||
     roomUiStatus === RoomUiStatus.gameOverConfirm;
 

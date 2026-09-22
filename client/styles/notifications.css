@@ -1,0 +1,65 @@
+/* ==========================================================================
+   Notification animations — shared by ResultBanner and GameToast
+   ========================================================================== */
+
+/* ResultBanner: slide up from 8px below + fade in on entry */
+@keyframes rb-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ResultBanner: one-shot background opacity pulse for success tone (900ms) */
+@keyframes rb-success-pulse {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ResultBanner: progress bar depletion via scaleX */
+@keyframes rb-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+/* GameToast: slide in from the right */
+@keyframes gt-enter {
+  from {
+    transform: translateX(110%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* GameToast: slide out to the right */
+@keyframes gt-exit {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(110%);
+  }
+}
+
+/* GameToast: progress bar depletion via scaleX */
+@keyframes gt-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}

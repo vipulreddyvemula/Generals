@@ -3,8 +3,7 @@ import { useRouter } from 'next/router';
 import { io } from 'socket.io-client';
 import { useTranslation } from 'next-i18next';
 import ChatBox from '@/components/ChatBox';
-
-import { Snackbar, Alert, AlertTitle } from '@mui/material';
+import GameToast from '@/components/GameToast';
 
 import {
   Room,
@@ -39,7 +38,6 @@ function GamingRoom() {
     myPlayerId,
     attackQueueRef,
     myUserName,
-    snackState,
   } = useGame();
 
   const socketDisconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -467,18 +465,7 @@ function GamingRoom() {
 
   return (
     <div className='generals-room-root'>
-      <Snackbar
-        open={snackState.open}
-        autoHideDuration={snackState.duration}
-        onClose={() => {
-          snackStateDispatch({ type: 'close' });
-        }}
-      >
-        <Alert severity={snackState.status} sx={{ width: '100%' }}>
-          <AlertTitle>{snackState.title}</AlertTitle>
-          {snackState.message}
-        </Alert>
-      </Snackbar>
+      <GameToast />
       {roomUiStatus === RoomUiStatus.gameSetting &&
         (room.id && myPlayerId ? (
           <GameSetting
