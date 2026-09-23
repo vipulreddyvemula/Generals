@@ -104,7 +104,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 We use postgresql + prisma
 
 - see `.env.example` to config prisma env correctly
-- if you init the repo or update a migration, run `pnpx prisma migrate dev` to apply the database schema
+- if you initialize the repo or add a migration, run `pnpm prisma migrate dev` to apply the database schema
 
 ```
 npx prisma migrate dev # migrate

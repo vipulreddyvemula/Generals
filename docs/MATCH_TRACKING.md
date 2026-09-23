@@ -35,7 +35,7 @@ The `/admin` page polls protected endpoints every five seconds. It does not join
 
 Uniqueness constraints prevent duplicate `(matchId, playerId)`, `(matchId, sequenceNumber)`, and `(matchId, idempotencyKey)` records. Indexed filters cover event, room, status, start time, player ID/handle, event type, sequence, and timestamp.
 
-The migration is `server/prisma/migrations/20260923000000_add_match_tracking/migration.sql`. The older unused custom-map migrations were converted from the stale SQLite scaffold to valid PostgreSQL SQL so a clean PostgreSQL `prisma migrate deploy` succeeds.
+The migration is `server/prisma/migrations/20260923000000_init_match_tracking/migration.sql`. Obsolete SQLite/custom-map migrations and `dev.db` artifacts were removed, leaving one PostgreSQL-only baseline.
 
 ## 3. Match lifecycle
 
@@ -130,6 +130,8 @@ pnpm run dev
 ```
 
 Open `http://localhost:3000/admin`, enter the `ADMIN_API_TOKEN` from `server/.env`, then play and finish a non-sandbox match. Initial players appear as immutable snapshots; the result and timeline appear after the next poll.
+
+If a disposable local PostgreSQL database was previously initialized from the retired SQLite/custom-map migration history, recreate that local database or its Docker volume before running `prisma migrate deploy`. Do not delete the current migrations directory. Preserve and migrate any real data instead of resetting a non-disposable database.
 
 ## 9. Azure deployment
 

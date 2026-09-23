@@ -1,3 +1,4 @@
+-- Initial PostgreSQL tournament and match-recording schema.
 -- CreateEnum
 CREATE TYPE "EventStatus" AS ENUM ('PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED');
 
