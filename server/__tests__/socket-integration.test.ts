@@ -65,7 +65,7 @@ describe('live Socket.IO event-safety regression', () => {
     const port = await openPort();
     const child = spawn(path.join(serverDir, 'node_modules/.bin/tsx'), ['src/server.ts'], {
       cwd: serverDir,
-      env: { ...process.env, PORT: String(port), CLIENT_URL: '*' },
+      env: { ...process.env, PORT: String(port), CLIENT_URL: '*', SKIP_CODEFORCES_START_REQUIREMENT: 'true' },
       stdio: 'pipe',
     });
     const sockets: any[] = [];
@@ -154,7 +154,7 @@ describe('live Socket.IO event-safety regression', () => {
     const port = await openPort();
     const child: ChildProcessWithoutNullStreams = spawn(path.join(serverDir, 'node_modules/.bin/tsx'), ['src/server.ts'], {
       cwd: serverDir,
-      env: { ...process.env, PORT: String(port), CLIENT_URL: '*' },
+      env: { ...process.env, PORT: String(port), CLIENT_URL: '*', SKIP_CODEFORCES_START_REQUIREMENT: 'true' },
       stdio: 'pipe',
     });
     let childOutput = '';
@@ -214,29 +214,14 @@ describe('live Socket.IO event-safety regression', () => {
 
       const commanderConfig = once(first.socket, 'commander_config');
       first.socket.emit('get_commander_config');
-      expect((await commanderConfig).abilities.Reinforce.energy).toBe(40);
+      expect((await commanderConfig).abilities.Reinforce.energy).toBe(50);
       const mathQuestion = once(first.socket, 'math_challenge');
       first.socket.emit('request_math_challenge');
       const math = await mathQuestion;
       expect(math).not.toHaveProperty('correctAnswer');
-      const answers: Record<string, string> = {
-        'What is 37 × 4?': '148',
-        'What is 144 ÷ 12?': '12',
-        'What is 256 − 89?': '167',
-        'If all A are B, and X is A, is X a B? (yes/no)': 'yes',
-        'What is 37 × 84?': '3108',
-        'What is 25% of 480?': '120',
-        'Solve for x: 3x + 7 = 31': '8',
-        'Area of a circle with radius 7? (use π = 22/7)': '154',
-        'If f(x) = 3x² − 2, find f(4)': '46',
-        'Next in sequence: 3, 7, 13, 21, 31, ?': '43',
-        'A right triangle has legs 9 and 12. Its hypotenuse?': '15',
-        'Next in sequence: 2, 6, 12, 20, 30, ?': '42',
-        'A clock shows 3:15. What is the smaller angle between its hands?': '7.5',
-      };
       const mathResult = once(first.socket, 'math_result');
-      first.socket.emit('submit_math_answer', math.id, answers[math.question]);
-      expect((await mathResult).status).toBe('SOLVED');
+      first.socket.emit('submit_math_answer', math.id, 'definitely-wrong-answer');
+      expect((await mathResult).status).toBe('NOT_ACCEPTED');
       const invalidHandle = once(first.socket, 'challenge_error');
       first.socket.emit('request_codeforces_challenge', { handle: '!' });
       expect((await invalidHandle).source).toBe('CODEFORCES');

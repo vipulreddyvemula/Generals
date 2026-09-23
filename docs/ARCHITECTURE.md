@@ -18,7 +18,7 @@ The codebase is divided into two primary parts:
 
 ## Server Architecture
 - **Framework**: Express and Socket.IO (v4.8).
-- **Database**: Prisma ORM, originally targeting PostgreSQL, but adapted to SQLite for MVP local development given infrastructure constraints.
+- **Database**: Prisma ORM targeting PostgreSQL. Live gameplay remains in memory; durable tournament and match records are stored in PostgreSQL as described in `MATCH_TRACKING.md`.
 - **Game Engine (server/src/lib)**:
   - `map.ts`: The core logic defining the game map, generation, and state manipulation (e.g. capturing territory, army movement).
   - `player.ts`: Represents a connected player and their properties (color, status, army count, etc.).

@@ -1,7 +1,7 @@
 node_modules
-npm-debug.log
-dist
+.next
+.next-*
 .env
 .env.*
 !.env.example
-records
+npm-debug.log

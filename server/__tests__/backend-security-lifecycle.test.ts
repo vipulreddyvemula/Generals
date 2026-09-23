@@ -145,7 +145,7 @@ describe('disconnect grace and restoration', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
-  it('keeps the player authoritative during grace and expires only after 30 seconds', () => {
+  it('keeps the player authoritative during the configured grace period', () => {
     const { room, first } = createActiveRoom();
     let expired = false;
     scheduleReconnectGrace(
@@ -157,7 +157,7 @@ describe('disconnect grace and restoration', () => {
       ReconnectGraceMs
     );
 
-    expect(ReconnectGraceMs).toBe(30_000);
+    expect(ReconnectGraceMs).toBe(120_000);
     expect(first.disconnected).toBe(true);
     expect(first.isDead).toBe(false);
     jest.advanceTimersByTime(ReconnectGraceMs - 1);

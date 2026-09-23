@@ -124,6 +124,10 @@ export class Message {
 export class Room {
   /** Server-only room challenge queue; excluded from serialized room updates. */
   public codeforcesQueue: SharedCodeforcesQueue | null = null;
+  /** Durable match identity for the current in-memory game; never serialized to players. */
+  public activeMatchId: string | null = null;
+  public activeEventId: string | null = null;
+  public activeMatchStartedAt: number | null = null;
   /** Host-selected commander problem difficulty; validated before any match begins. */
   public commanderDifficultyMode: 'CLIST_BAND' | 'CF_RATING' = 'CLIST_BAND';
   public commanderClistTier: number = 0;
@@ -191,7 +195,15 @@ export class Room {
   }
 
   toJSON() {
-    const { gameLoop, generals, codeforcesQueue, ...json } = this;
+    const {
+      gameLoop,
+      generals,
+      codeforcesQueue,
+      activeMatchId,
+      activeEventId,
+      activeMatchStartedAt,
+      ...json
+    } = this;
     return json;
   }
 }

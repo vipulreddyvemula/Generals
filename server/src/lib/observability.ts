@@ -1,10 +1,18 @@
 import { RoomPool } from './types';
 import { roomRuntimeSnapshot } from './room-runtime';
+import { trackMetric } from './telemetry';
 
 export class EventMetrics {
   reconnects = 0;
   exceptions = 0;
   gameEnds = 0;
+  matchStarts = 0;
+  matchFinishes = 0;
+  matchAborts = 0;
+  playerEliminations = 0;
+  generalCaptures = 0;
+  socketErrors = 0;
+  replayWriteFailures = 0;
   private events = 0;
   private inboundBytes = 0;
   private outboundBytes = 0;
@@ -59,12 +67,33 @@ export class EventMetrics {
       reconnects: this.reconnects,
       exceptions: this.exceptions,
       gameEnds: this.gameEnds,
+      matchStarts: this.matchStarts,
+      matchFinishes: this.matchFinishes,
+      matchAborts: this.matchAborts,
+      playerEliminations: this.playerEliminations,
+      generalCaptures: this.generalCaptures,
+      socketErrors: this.socketErrors,
+      replayWriteFailures: this.replayWriteFailures,
       stuckRooms: runtime.filter(({ state }) => now - state.lastProgressAt > 15_000).map(({ room }) => room.id),
       memory: {
         rss: process.memoryUsage().rss,
         heapUsed: process.memoryUsage().heapUsed,
       },
     };
+  }
+
+  publish(snapshot: ReturnType<EventMetrics['snapshot']>): void {
+    trackMetric('active_sockets', snapshot.connectedSockets);
+    trackMetric('active_rooms', snapshot.activeRooms);
+    trackMetric('active_matches', snapshot.activeMatches);
+    trackMetric('active_players', snapshot.activePlayers);
+    trackMetric('game_tick_duration_max_ms', snapshot.tickDurationMs.max);
+    trackMetric('game_tick_duration_mean_ms', snapshot.tickDurationMs.mean);
+    trackMetric('game_tick_overlaps_prevented', snapshot.tickOverlapsPrevented);
+    trackMetric('event_loop_lag_ms', snapshot.eventLoopLagMs);
+    trackMetric('socket_events_per_second', snapshot.eventsPerSecond);
+    trackMetric('process_rss_bytes', snapshot.memory.rss);
+    trackMetric('process_heap_used_bytes', snapshot.memory.heapUsed);
   }
 }
 

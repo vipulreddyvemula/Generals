@@ -1,5 +1,4 @@
 import { MathGenerator, ENERGY_REWARD_EASY } from '../src/lib/commander/math-generator';
-import { MathDomain } from '../src/lib/types';
 
 describe('MathGenerator — hardcoded pool', () => {
   it('generates a challenge with all required fields', () => {
@@ -13,13 +12,13 @@ describe('MathGenerator — hardcoded pool', () => {
   });
 
   it('generates different challenges across multiple calls (randomness test)', () => {
-    const domains = new Set<MathDomain>();
+    const questions = new Set<string>();
     for (let i = 0; i < 50; i++) {
       const c = MathGenerator.generateChallenge(0);
-      domains.add(c.domain);
+      questions.add(c.question);
     }
-    // After 50 calls we should see at least 2 different domains
-    expect(domains.size).toBeGreaterThan(1);
+    // The current curated pool is Arithmetic-only, but challenge selection is random.
+    expect(questions.size).toBeGreaterThan(1);
   });
 
   it('verifyAnswer: accepts correct answer (case-insensitive, whitespace-tolerant)', () => {

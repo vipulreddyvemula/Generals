@@ -85,6 +85,9 @@ export function cleanupFinishedRoom(room: Room): void {
   room.map = null;
   room.generals = [];
   room.codeforcesQueue = null;
+  room.activeMatchId = null;
+  room.activeEventId = null;
+  room.activeMatchStartedAt = null;
 
   if (room.players.length > 0 && !room.players.some((player) => player.isRoomHost)) {
     room.players[0].setRoomHost(true);

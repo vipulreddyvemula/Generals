@@ -1,10 +1,11 @@
+import 'dotenv/config';
+import './lib/telemetry';
 import express from 'express';
 import { Request, Response } from 'express';
 import { Server, Socket } from 'socket.io';
 import xss from 'xss';
 import crypto from 'crypto';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 
@@ -13,6 +14,9 @@ import { roomPool, createRoom } from './lib/room-pool';
 import { canJoinRoom } from './lib/event-limits';
 import { resetRoomRuntime, runRoomTick, startRoomOnce } from './lib/room-runtime';
 import { eventMetrics } from './lib/observability';
+import { createAdminRouter } from './lib/admin-api';
+import { EliminationReason, matchRecorder, snapshotPlayer } from './lib/match-recorder';
+import { trackEvent, trackException, trackMetric } from './lib/telemetry';
 import { SESSION_CLAIM_POLICY, SESSION_IP_POLICY, SOCKET_EVENT_POLICIES, SocketRateLimiter } from './lib/socket-rate-limit';
 import { addDummyBotToRoom } from './lib/dummy-bot';
 
@@ -59,10 +63,14 @@ import {
 } from './lib/security';
 import { authorizeReconnect, createReconnectCredential } from './lib/session';
 
-dotenv.config();
-
 if (!process.env.CLIENT_URL || !process.env.PORT) {
   throw new Error('Please fill in `CLIENT_URL` and `PORT`.');
+}
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required in production.');
+  if (!process.env.ADMIN_API_TOKEN || process.env.ADMIN_API_TOKEN.length < 32) {
+    throw new Error('ADMIN_API_TOKEN must contain at least 32 characters in production.');
+  }
 }
 
 const app = express();
@@ -73,14 +81,22 @@ const cors_urls = process.env.CLIENT_URL == '*' ? '*' : process.env.CLIENT_URL.s
 console.log(cors_urls);
 
 if (process.env.NODE_ENV === 'production' && cors_urls === '*') {
-  console.warn(
-    '[SECURITY] CLIENT_URL is set to wildcard (*) in production. ' +
-      'Set CLIENT_URL to your explicit frontend origin(s) to enforce CORS.'
-  );
+  throw new Error('CLIENT_URL must contain explicit frontend origin(s) in production; wildcard CORS is forbidden.');
 }
 
 app.use(express.json());
 app.use(cors({ origin: cors_urls }));
+app.use((req, res, next) => {
+  const startedAt = performance.now();
+  res.once('finish', () => {
+    trackMetric('http_request_latency_ms', performance.now() - startedAt, {
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+    });
+  });
+  next();
+});
 
 app.get('/ping', (req: Request, res: Response) => {
   res.status(200).json('');
@@ -152,6 +168,8 @@ app.get('/get_replay/:replayId', async (req: Request, res: Response) => {
   });
 });
 
+app.use('/admin', createAdminRouter(roomPool));
+
 const server = app.listen(process.env.PORT, () => {
   console.log(`Application started on port ${process.env.PORT}!`);
 });
@@ -187,6 +205,11 @@ io.engine.on('connection', (connection) => {
     eventMetrics.recordBytes('out', typeof data === 'string' ? Buffer.byteLength(data) : Buffer.isBuffer(data) ? data.length : 0);
   });
 });
+io.engine.on('connection_error', (error) => {
+  eventMetrics.socketErrors += 1;
+  trackMetric('socket_io_errors', 1, { code: error.code || 'connection_error' });
+  trackException(error, { source: 'socket_io_connection' });
+});
 
 let nextLagCheckAt = Date.now() + 1000;
 const lagTimer = setInterval(() => {
@@ -197,7 +220,10 @@ const lagTimer = setInterval(() => {
 lagTimer.unref();
 
 const metricsTimer = setInterval(() => {
-  console.info(JSON.stringify(eventMetrics.snapshot(roomPool, io.sockets.sockets.size)));
+  const snapshot = eventMetrics.snapshot(roomPool, io.sockets.sockets.size);
+  console.info(JSON.stringify(snapshot));
+  eventMetrics.publish(snapshot);
+  trackMetric('codeforces_queue_depth', codeforcesApiQueue.queueDepth);
 }, 15_000);
 metricsTimer.unref();
 
@@ -215,7 +241,10 @@ const gcTimer = setInterval(() => {
 gcTimer.unref();
 
 app.get('/health', (_req, res) => {
-  res.json(eventMetrics.snapshot(roomPool, io.sockets.sockets.size));
+  res.json({
+    ...eventMetrics.snapshot(roomPool, io.sockets.sockets.size),
+    codeforcesQueueDepth: codeforcesApiQueue.queueDepth,
+  });
 });
 
 function getCodeforcesEligiblePlayers(room: Room): Player[] {
@@ -350,16 +379,54 @@ function issuePlayerSession(player: Player, socket: Socket): void {
   socket.emit('set_player_id', player.id);
 }
 
+function recordElimination(
+  room: Room,
+  player: Player,
+  reason: EliminationReason,
+  placement: number,
+  killerPlayerId: string | null = null,
+  timestamp = new Date()
+): void {
+  if (!room.activeMatchId) return;
+  matchRecorder.recordPlayerEliminated(room.activeMatchId, {
+    playerId: player.id,
+    killerPlayerId,
+    turn: room.map?.turn || 0,
+    reason,
+    placement,
+    timestamp,
+  });
+  eventMetrics.playerEliminations += 1;
+}
+
+function currentEliminationPlacement(room: Room): number {
+  return room.players.filter((player) => !player.isDead && !player.spectating()).length;
+}
+
 function finishGame(room: Room, io: Server, gameRecord: GameRecord): boolean {
+  const matchId = room.activeMatchId;
+  const finalTurn = room.map?.turn || 0;
   if (!claimGameTermination(room)) return false;
   resetRoomRuntime(room);
   eventMetrics.gameEnds += 1;
+  eventMetrics.matchFinishes += 1;
 
   const outcome = getGameOutcome(room);
-  const winners =
+  const winningPlayers =
     outcome.winnerTeam === null
       ? []
-      : room.players.filter((player) => player.team === outcome.winnerTeam).map((player) => player.minify(true));
+      : room.players.filter((player) => player.team === outcome.winnerTeam && !player.spectating());
+  const winners = winningPlayers.map((player) => player.minify(true));
+
+  if (matchId) {
+    matchRecorder.finishMatch(matchId, {
+      winnerPlayerId: winningPlayers[0]?.id || null,
+      winnerPlayerIds: winningPlayers.map((player) => player.id),
+      winnerTeam: outcome.winnerTeam,
+      finalTurn,
+      endedAt: new Date(),
+    });
+  }
 
   // Emit game_ended immediately (empty replayLink) — do not block on disk I/O.
   io.in(room.id).emit('game_ended', winners, '');
@@ -369,8 +436,12 @@ function finishGame(room: Room, io: Server, gameRecord: GameRecord): boolean {
     .outPutToJSON(process.cwd())
     .then((replayLink) => {
       io.in(room.id).emit('replay_ready', replayLink);
+      if (matchId) matchRecorder.attachReplay(matchId, replayLink);
     })
     .catch((error) => {
+      eventMetrics.replayWriteFailures += 1;
+      trackMetric('replay_write_failures', 1);
+      trackException(error, { source: 'replay_write', matchId, roomId: room.id });
       console.error('Failed to write game replay:', error);
     });
 
@@ -419,7 +490,10 @@ function handleDisconnectInRoom(room: Room, player: Player, socketId: string, io
 
         livePlayer.sessionTokenHash = '';
         if (liveRoom.gameStarted && !livePlayer.spectating()) {
-          neutralizePlayer(liveRoom, livePlayer);
+          const placement = currentEliminationPlacement(liveRoom);
+          if (neutralizePlayer(liveRoom, livePlayer)) {
+            recordElimination(liveRoom, livePlayer, 'DISCONNECT_TIMEOUT', placement);
+          }
           io.in(liveRoom.id).emit('room_message', livePlayer.minify(), 'failed to reconnect and was eliminated.');
           if (!liveRoom.codeforcesQueue) tryInitializeCodeforcesQueue(liveRoom, io);
           const outcome = getGameOutcome(liveRoom);
@@ -466,7 +540,9 @@ async function checkForcedStart(room: Room, io: Server) {
     }
 
     const missingHandles = activePlayers.filter((player) => !player.codeforcesHandle || !player.codeforcesSolvedSetReady);
-    if (!room.isSandbox && missingHandles.length > 0) {
+    const skipCodeforcesGateForIntegrationTest =
+      process.env.NODE_ENV === 'test' && process.env.SKIP_CODEFORCES_START_REQUIREMENT === 'true';
+    if (!room.isSandbox && !skipCodeforcesGateForIntegrationTest && missingHandles.length > 0) {
       io.in(room.id).emit(
         'error',
         'Match cannot start',
@@ -478,6 +554,10 @@ async function checkForcedStart(room: Room, io: Server) {
       await startRoomOnce(room, () => handleGame(room, io));
     } catch (error) {
       eventMetrics.exceptions += 1;
+      if (room.activeMatchId) {
+        matchRecorder.abortMatch(room.activeMatchId, 'GAME_START_FAILED', room.map?.turn ?? null);
+        eventMetrics.matchAborts += 1;
+      }
       console.error('Failed to start room:', room.id, error);
       cleanupFinishedRoom(room);
       resetRoomRuntime(room);
@@ -542,6 +622,19 @@ function handleGame(room: Room, io: Server): void {
     room.globalMapDiff = globalMapDiff;
     room.gameRecord = gameRecord;
 
+    if (!room.isSandbox) {
+      const startedAt = new Date();
+      room.activeEventId = process.env.TOURNAMENT_EVENT_ID || null;
+      room.activeMatchStartedAt = startedAt.getTime();
+      room.activeMatchId = matchRecorder.startMatch({
+        roomId: room.id,
+        eventId: room.activeEventId,
+        startedAt,
+        players: room.players.filter((player) => !player.spectating()).map((player) => snapshotPlayer(player, startedAt)),
+      });
+      eventMetrics.matchStarts += 1;
+    }
+
     console.info(`Start game`);
     room.gameStarted = true;
     if (room.isSandbox) {
@@ -585,7 +678,10 @@ function handleGame(room: Room, io: Server): void {
             const king = player.king;
             if (!king) {
               console.error(`Active player ${player.id} has no king`);
-              neutralizePlayer(room, player);
+              const placement = currentEliminationPlacement(room);
+              if (neutralizePlayer(room, player)) {
+                recordElimination(room, player, 'INVALID_GENERAL_STATE', placement);
+              }
               return;
             }
             const block = gameMap.getBlock(king);
@@ -593,7 +689,20 @@ function handleGame(room: Room, io: Server): void {
             if (blockPlayerIndex !== -1) {
               if (block.player !== player && player.isDead === false) {
                 const captor = room.players[blockPlayerIndex];
+                const capturedAt = new Date();
+                const placement = currentEliminationPlacement(room);
                 console.log(captor.username, 'captured', player.username);
+                if (room.activeMatchId) {
+                  matchRecorder.recordGeneralCaptured(
+                    room.activeMatchId,
+                    player.id,
+                    captor.id,
+                    gameMap.turn,
+                    room.id,
+                    capturedAt
+                  );
+                  eventMetrics.generalCaptures += 1;
+                }
                 // Emit events BEFORE state mutation so client receives accurate data.
                 io.in(room.id).emit('captured', captor.minify(), player.minify());
                 const player_socket = io.sockets.sockets.get(player.socket_id);
@@ -605,7 +714,9 @@ function handleGame(room: Room, io: Server): void {
                 // concurrent eligibility check (Codeforces queue, victory calc)
                 // cannot observe the "captured but still alive" intermediate state.
                 // neutralizePlayer clears player.king, player.land, and marks isDead.
-                neutralizePlayer(room, player);
+                if (neutralizePlayer(room, player)) {
+                  recordElimination(room, player, 'GENERAL_CAPTURED', placement, captor.id, capturedAt);
+                }
                 // Give the captured king tile to the conqueror (neutralizePlayer
                 // beNeutralizes it, so player === null now; captor claims it).
                 const capturedKingBlock = gameMap.getBlock(king);
@@ -617,7 +728,20 @@ function handleGame(room: Room, io: Server): void {
               } else if (!player.disconnected && gameMap.turn - player.lastMoveTurn >= 4000) {
                 // AFK: no movement for 4000 turns.
                 // lastMoveTurn is updated exclusively by the attack handler.
-                neutralizePlayer(room, player);
+                const surrenderedAt = new Date();
+                const placement = currentEliminationPlacement(room);
+                if (neutralizePlayer(room, player)) {
+                  if (room.activeMatchId) {
+                    matchRecorder.recordPlayerSurrendered(
+                      room.activeMatchId,
+                      player.id,
+                      gameMap.turn,
+                      'AFK_SURRENDERED',
+                      surrenderedAt
+                    );
+                  }
+                  recordElimination(room, player, 'AFK_SURRENDERED', placement, null, surrenderedAt);
+                }
                 if (!room.codeforcesQueue) tryInitializeCodeforcesQueue(room, io);
                 io.in(room.id).emit('room_message', player.minify(), 'surrendered');
                 
@@ -763,6 +887,8 @@ io.on('connection', async (socket) => {
     player = reconnectingPlayer;
     restoreConnectedPlayer(player, socket.id);
     eventMetrics.reconnects += 1;
+    trackEvent('player_reconnected', { roomId: room.id, playerId: player.id });
+    trackMetric('player_reconnects', 1);
     socket.join(room.id);
     issuePlayerSession(player, socket);
     io.in(room.id).emit('room_message', player.minify(), 'reconnected.');
@@ -856,6 +982,9 @@ io.on('connection', async (socket) => {
     }
 
     room.players.push(player);
+    if (room.activeMatchId) {
+      matchRecorder.recordPlayerJoined(room.activeMatchId, snapshotPlayer(player));
+    }
 
     // Fetch solved history during room entry, before the match begins. The
     // in-game commander panel never needs to ask the player to sync again.
@@ -888,6 +1017,12 @@ io.on('connection', async (socket) => {
       return;
     }
     next();
+  });
+
+  socket.on('error', (error) => {
+    eventMetrics.socketErrors += 1;
+    trackMetric('socket_io_errors', 1, { roomId: room.id });
+    if (error instanceof Error) trackException(error, { source: 'socket_io', roomId: room.id });
   });
 
   socket.on('get_room_info', async () => {
@@ -924,6 +1059,8 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('surrender', () => {
+    const surrenderedAt = new Date();
+    const placement = currentEliminationPlacement(room);
     const result = surrenderForSocket(room, socket.id);
     if (result.ok === false) {
       socket.emit('surrender_result', { status: 'REJECTED', code: result.code, message: result.message });
@@ -931,6 +1068,16 @@ io.on('connection', async (socket) => {
       return;
     }
     const actingPlayer = result.value;
+    if (room.activeMatchId) {
+      matchRecorder.recordPlayerSurrendered(
+        room.activeMatchId,
+        actingPlayer.id,
+        room.map?.turn || 0,
+        'SURRENDERED',
+        surrenderedAt
+      );
+    }
+    recordElimination(room, actingPlayer, 'SURRENDERED', placement, null, surrenderedAt);
     console.log(`${actingPlayer.username} surrendered.`);
     if (!room.codeforcesQueue) tryInitializeCodeforcesQueue(room, io);
     socket.emit('surrender_result', { status: 'ACCEPTED' });

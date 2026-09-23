@@ -2,6 +2,8 @@
 .vscode/
 server/records/*
 server/custom_map/*
+server/prisma/*.db
+server/prisma/*.db-journal
 .env
 .env.local
 temp.md

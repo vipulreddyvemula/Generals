@@ -28,10 +28,10 @@ const sharedProblem = (contestId: number, problemIndex = 'A'): CodeforcesProblem
 describe('Commander challenge authority', () => {
   it('keeps the requested reward balance in one server config', () => {
     expect(COMMANDER_CONFIG.math.rewards).toEqual({
-      EASY: { energy: 1, troops: 1 },
-      MEDIUM: { energy: 2, troops: 2 },
-      HARD: { energy: 4, troops: 3 },
-      EXPERT: { energy: 5, troops: 5 },
+      EASY: { energy: 3, troops: 1 },
+      MEDIUM: { energy: 3, troops: 1 },
+      HARD: { energy: 3, troops: 1 },
+      EXPERT: { energy: 3, troops: 1 },
     });
     expect(COMMANDER_CONFIG.codeforces.energyReward).toBe(50);
     expect(COMMANDER_CONFIG.codeforces.troopReward).toBe(10);

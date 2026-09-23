@@ -8,3 +8,107 @@ datasource db {
 generator client {
   provider = "prisma-client-js"
 }
+
+enum EventStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum MatchStatus {
+  ACTIVE
+  COMPLETED
+  ABORTED
+}
+
+enum MatchEventType {
+  PLAYER_JOINED
+  PLAYER_ELIMINATED
+  GENERAL_CAPTURED
+  PLAYER_SURRENDERED
+  MATCH_STARTED
+  MATCH_FINISHED
+  MATCH_ABORTED
+}
+
+model Event {
+  id        String      @id @default(uuid()) @db.Uuid
+  name      String
+  status    EventStatus @default(PLANNED)
+  startedAt DateTime?
+  endedAt   DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  matches   Match[]
+
+  @@index([status])
+  @@index([startedAt])
+}
+
+model Match {
+  id              String        @id @default(uuid()) @db.Uuid
+  eventId         String?       @db.Uuid
+  roomId          String
+  status          MatchStatus   @default(ACTIVE)
+  startedAt       DateTime
+  endedAt         DateTime?
+  winnerPlayerId  String?
+  winnerTeam      Int?
+  finalTurn       Int?
+  durationSeconds Int?
+  replayId        String?
+  replayStorage   String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  event           Event?        @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  players         MatchPlayer[]
+  events          MatchEvent[]
+
+  @@index([eventId])
+  @@index([roomId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model MatchPlayer {
+  id                String    @id @default(uuid()) @db.Uuid
+  matchId           String    @db.Uuid
+  playerId          String
+  playerName        String
+  codeforcesHandle  String?
+  team              Int
+  color             Int
+  isSpectator       Boolean   @default(false)
+  isWinner          Boolean   @default(false)
+  placement         Int?
+  joinedAt          DateTime
+  eliminatedAt      DateTime?
+  eliminationReason String?
+  createdAt         DateTime  @default(now())
+  match             Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, playerId])
+  @@index([matchId])
+  @@index([playerId])
+  @@index([codeforcesHandle])
+}
+
+model MatchEvent {
+  id             String         @id @default(uuid()) @db.Uuid
+  matchId        String         @db.Uuid
+  sequenceNumber Int
+  idempotencyKey String
+  type           MatchEventType
+  playerId       String?
+  timestamp      DateTime
+  payload        Json
+  createdAt      DateTime       @default(now())
+  match          Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, sequenceNumber])
+  @@unique([matchId, idempotencyKey])
+  @@index([matchId])
+  @@index([type])
+  @@index([timestamp])
+}

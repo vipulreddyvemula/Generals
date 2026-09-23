@@ -6,7 +6,7 @@
 # Run pending migrations (deploy mode — never runs generators or dev seeds).
 # Skip if DATABASE_URL is unset (e.g. no-database deployment).
 if [ -n "$DATABASE_URL" ]; then
-  npx prisma migrate deploy
+  pnpm prisma migrate deploy
 fi
 
-npm run start:prod
+node ./dist/src/server.js

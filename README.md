@@ -131,6 +131,8 @@ docker-compose up -d
 
 ## Deployment
 
+Tournament match recording, the protected `/admin` dashboard, monitoring, and the single-instance Azure deployment procedure are documented in [docs/MATCH_TRACKING.md](docs/MATCH_TRACKING.md).
+
 - [PM2](https://pm2.keymetrics.io/docs/usage/quick-start/) is a production process manager for Node.js applications, which is very easy to use.
 - docker-compose: for setup database
 

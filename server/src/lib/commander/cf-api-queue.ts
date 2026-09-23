@@ -1,5 +1,6 @@
 import https from 'https';
 import { COMMANDER_CONFIG } from './config';
+import { trackEvent, trackMetric } from '../telemetry';
 
 export interface CodeforcesSubmission {
   id: number;
@@ -38,6 +39,8 @@ export function classifyVerification(
 }
 
 type QueueTask<T> = {
+  priority: 'high' | 'low';
+  enqueuedAt: number;
   run: () => Promise<T>;
   resolve: (value: T) => void;
   reject: (error: Error) => void;
@@ -93,6 +96,10 @@ export class CodeforcesApiQueue {
   private running = false;
   private lastRequestAt = 0;
   private blockedUntil = 0;
+
+  get queueDepth(): number {
+    return this.highPriority.length + this.lowPriority.length + (this.running ? 1 : 0);
+  }
 
   constructor(
     private readonly fetcher: UserStatusFetcher = fetchUserStatus,
@@ -168,8 +175,9 @@ export class CodeforcesApiQueue {
       return Promise.reject(new CodeforcesApiError('RATE_LIMIT'));
     }
     return new Promise<T>((resolve, reject) => {
-      const task: QueueTask<T> = { run, resolve, reject };
+      const task: QueueTask<T> = { priority, enqueuedAt: Date.now(), run, resolve, reject };
       (priority === 'high' ? this.highPriority : this.lowPriority).push(task);
+      trackMetric('codeforces_queue_depth', this.queueDepth);
       void this.drain();
     });
   }
@@ -186,12 +194,22 @@ export class CodeforcesApiQueue {
       this.lastRequestAt = Date.now();
       try {
         task.resolve(await task.run());
+        trackMetric(
+          task.priority === 'high' ? 'codeforces_verification_latency_ms' : 'codeforces_history_latency_ms',
+          Date.now() - task.enqueuedAt
+        );
       } catch (error) {
         if (error instanceof CodeforcesApiError && error.code === 'RATE_LIMIT') {
           this.blockedUntil = Date.now() + this.rateLimitBackoffMs;
         }
+        trackEvent('codeforces_api_failure', {
+          priority: task.priority,
+          code: error instanceof CodeforcesApiError ? error.code : 'UNAVAILABLE',
+        });
+        trackMetric('codeforces_failures', 1, { priority: task.priority });
         task.reject(error instanceof Error ? error : new CodeforcesApiError('UNAVAILABLE'));
       }
+      trackMetric('codeforces_queue_depth', this.queueDepth);
     }
     this.running = false;
   }
