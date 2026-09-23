@@ -157,6 +157,16 @@ export default function InGameTutorial({
   const { room, socketRef, mapData, initGameInfo, activeAbility, myPlayerId } =
     useGame();
   const [step, setStep] = useState(0);
+  const [nextEnabled, setNextEnabled] = useState(false);
+
+  useEffect(() => {
+    setNextEnabled(false);
+    const timer = setTimeout(() => {
+      setNextEnabled(true);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [step]);
+
   const [generalClicked, setGeneralClicked] = useState(false);
   const [moveConfirmed, setMoveConfirmed] = useState(false);
   const [halfMoveConfirmed, setHalfMoveConfirmed] = useState(false);
@@ -452,7 +462,7 @@ export default function InGameTutorial({
     if (step === 7) return ['[data-tutorial="math-card"]'];
     if (step === 8) return ['[data-tutorial="abilities-tab"]'];
     if (step === 9) {
-      if (activeAbility === 'Scout') {
+      if (activeAbility === 'Scout' || waitingForAbilityEffect === 'Scout' || scouted) {
         return ['[data-tutorial="map-board"]'];
       }
       return [
@@ -461,7 +471,7 @@ export default function InGameTutorial({
       ];
     }
     if (step === 10) {
-      if (activeAbility === 'Airstrike') {
+      if (activeAbility === 'Airstrike' || waitingForAbilityEffect === 'Airstrike' || airstruck) {
         return ['[data-tutorial="enemy-general"]'];
       }
       return [
@@ -470,7 +480,7 @@ export default function InGameTutorial({
       ];
     }
     if (step === 11) {
-      if (activeAbility === 'Reinforce') {
+      if (activeAbility === 'Reinforce' || waitingForAbilityEffect === 'Reinforce' || reinforced) {
         return ['[data-tutorial="my-general"]'];
       }
       return [
@@ -484,7 +494,14 @@ export default function InGameTutorial({
         '[data-tutorial="battlefield"]',
       ];
     return [];
-  }, [activeAbility, step]);
+  }, [
+    activeAbility,
+    airstruck,
+    reinforced,
+    scouted,
+    step,
+    waitingForAbilityEffect,
+  ]);
 
   const positionTutorial = useCallback(
     (scrollTarget = false) => {
@@ -845,13 +862,29 @@ export default function InGameTutorial({
               >
                 ← Previous
               </button>
-              {!ABILITY_FEEDBACK_STEPS.has(step) && (
-                <button
-                  disabled={step === STEPS.length - 1 || leaving}
-                  onClick={() => navigateTutorial(step + 1)}
+              {step !== STEPS.length - 1 && (
+                <span
+                  className={!nextEnabled ? styles.immediateTooltip : undefined}
+                  data-tooltip={
+                    !nextEnabled
+                      ? INFORMATIONAL_STEPS.has(step)
+                        ? 'Please read the instructions to proceed'
+                        : 'Please complete the task to proceed'
+                      : undefined
+                  }
+                  style={{ display: 'flex', cursor: !nextEnabled ? 'not-allowed' : 'auto' }}
                 >
-                  Next →
-                </button>
+                  <button
+                    disabled={leaving || !nextEnabled}
+                    onClick={() => navigateTutorial(step + 1)}
+                    style={{
+                      width: '100%',
+                      ...(!nextEnabled ? { pointerEvents: 'none' } : {}),
+                    }}
+                  >
+                    Next →
+                  </button>
+                </span>
               )}
             </div>
           </>

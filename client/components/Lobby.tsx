@@ -221,8 +221,8 @@ function RoomSettings({
                 update('commanderClistTier', Number(event.target.value))
               }
             >
-              <option value={0}>Super Easy · CList 0–300</option>
-              <option value={1}>Easy · CList 301–600</option>
+              <option value={0}>Super Easy · CList 0–200</option>
+              <option value={1}>Easy · CList 201–600</option>
               <option value={2}>Medium · CList 601–1000</option>
               <option value={3}>Hard · CList 1001–1500</option>
               <option value={4}>Very Hard · CList 1501+</option>

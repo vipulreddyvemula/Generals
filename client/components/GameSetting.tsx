@@ -33,8 +33,8 @@ function SettingRow({ label, value }: { label: string; value: string }) {
 }
 
 const clistTiers = [
-  'Super Easy · CList 0–300',
-  'Easy · CList 301–600',
+  'Super Easy · CList 0–200',
+  'Easy · CList 201–600',
   'Medium · CList 601–1000',
   'Hard · CList 1001–1500',
   'Very Hard · CList 1501+',

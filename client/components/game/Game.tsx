@@ -20,13 +20,17 @@ export default function Game() {
     const socket = socketRef.current;
     if (!socket) return;
     const onSurrenderResult = (result: { status: string }) => {
-      if (result.status !== 'ACCEPTED') {
+      if (result.status === 'ACCEPTED') {
+        setIsSurrendered(true);
+        setDialogContent([[null], 'game_surrender', null]);
+        setOpenOverDialog(true);
+      } else if (result.status === 'AUTO_SURRENDERED_AFK') {
+        setIsSurrendered(true);
+        setDialogContent([[null], 'game_auto_surrender', 'inactivity']);
+        setOpenOverDialog(true);
+      } else {
         setSurrenderPending(false);
-        return;
       }
-      setIsSurrendered(true);
-      setDialogContent([[null], 'game_surrender', null]);
-      setOpenOverDialog(true);
     };
     socket.on('surrender_result', onSurrenderResult);
     return () => {

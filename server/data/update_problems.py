@@ -122,6 +122,22 @@ for p in new_problems:
 # Now sort based on clist rating 'l' (using 0 if missing)
 existing_problems.sort(key=lambda x: x.get('l', 0))
 
+# Recalculate clistBand ('b') for all problems to ensure correctness
+for p in existing_problems:
+    l = p.get('l', -1)
+    if l < 0:
+        p['b'] = -1
+    elif l <= 200:
+        p['b'] = 0
+    elif l <= 600:
+        p['b'] = 1
+    elif l <= 1000:
+        p['b'] = 2
+    elif l <= 1500:
+        p['b'] = 3
+    else:
+        p['b'] = 4
+
 with open(problems_file, 'w') as f:
     json.dump(existing_problems, f, indent=2)
 

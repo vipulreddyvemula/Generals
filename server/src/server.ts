@@ -620,6 +620,12 @@ function handleGame(room: Room, io: Server): void {
                 neutralizePlayer(room, player);
                 if (!room.codeforcesQueue) tryInitializeCodeforcesQueue(room, io);
                 io.in(room.id).emit('room_message', player.minify(), 'surrendered');
+                
+                const player_socket = io.sockets.sockets.get(player.socket_id);
+                if (player_socket) {
+                  player_socket.emit('surrender_result', { status: 'AUTO_SURRENDERED_AFK' });
+                }
+                io.in(room.id).emit('update_room', room);
               }
             }
           }

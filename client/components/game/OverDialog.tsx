@@ -29,6 +29,10 @@ export default function OverDialog() {
     title = t('you-surrender');
     subtitle = '';
   }
+  if (game_status === 'game_auto_surrender') {
+    title = 'Auto-Surrendered';
+    subtitle = `Reason: ${replay_link}`; // We passed reason via replay_link in Game.tsx
+  }
   if (userData) {
     if (game_status === 'game_over') {
       title = t('game-over');

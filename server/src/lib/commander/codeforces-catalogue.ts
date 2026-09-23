@@ -28,8 +28,8 @@ export type CommanderDifficultySelection = {
 };
 
 const CLIST_TIER_RANGES: Array<[number, number, number | null]> = [
-  [0, 0, 300],
-  [1, 301, 600],
+  [0, 0, 200],
+  [1, 201, 600],
   [2, 601, 1000],
   [3, 1001, 1500],
   [4, 1501, null],
