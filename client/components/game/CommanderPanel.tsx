@@ -39,10 +39,11 @@ const acceptedPulse = keyframes`
 `;
 
 const sectionCardSx = {
-  border: '1px solid var(--g-border)',
+  border: '1px solid rgba(104,148,171,0.28)',
+  borderTop: '1px solid rgba(104,148,171,0.45)',
   borderRadius: '7px',
-  background: 'var(--g-panel)',
-  boxShadow: '0 14px 40px rgba(0,0,0,0.2)',
+  background: 'linear-gradient(160deg, rgba(13,30,46,0.95) 0%, rgba(8,19,30,0.95) 100%)',
+  boxShadow: '0 4px 20px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03)',
   p: 1.7,
 } as const;
 
@@ -717,7 +718,7 @@ export default function CommanderPanel() {
                   letterSpacing: '0.12em',
                   color: 'var(--g-gold)',
                   lineHeight: 1,
-                  textShadow: '0 2px 16px rgba(217,183,101,0.3)',
+                  textShadow: '0 0 20px rgba(217,183,101,0.45), 0 2px 8px rgba(0,0,0,0.8)',
                 }}
               >
                 COMMANDER
@@ -725,7 +726,7 @@ export default function CommanderPanel() {
               <Typography
                 sx={{
                   fontSize: 8,
-                  color: 'rgba(217,183,101,0.55)',
+                  color: 'rgba(217,183,101,0.75)',
                   letterSpacing: '0.22em',
                   lineHeight: 1,
                   mt: 0.35,
@@ -792,6 +793,7 @@ export default function CommanderPanel() {
                   sx={{
                     font: '700 13px Cinzel, serif',
                     color: 'var(--g-gold)',
+                    textShadow: '0 0 10px rgba(217,183,101,0.3)',
                     letterSpacing: '0.07em',
                     textTransform: 'uppercase',
                   }}
@@ -1288,14 +1290,17 @@ export default function CommanderPanel() {
                     >
                       <Box
                         sx={{
-                          border: `1px solid ${selected ? ability.accent : affordable ? `${ability.accent}50` : 'rgba(255,255,255,0.1)'}`,
+                          border: selected
+                            ? `1px solid ${ability.accent}`
+                            : affordable
+                              ? `1px solid ${ability.accent}50`
+                              : '1px solid rgba(104,148,171,0.25)',
                           borderRadius: '7px',
                           background: selected
                             ? `${ability.accent}12`
                             : affordable
                               ? 'rgba(8,18,30,0.85)'
-                              : 'rgba(8,18,30,0.5)',
-                          opacity: affordable ? 1 : 0.45,
+                              : 'rgba(10,22,34,0.9)',
                           overflow: 'hidden',
                           transition: 'all 0.18s',
                           '&:hover': affordable
@@ -1312,7 +1317,7 @@ export default function CommanderPanel() {
                             height: 2,
                             background: affordable
                               ? ability.accent
-                              : 'rgba(255,255,255,0.1)',
+                              : 'rgba(104,148,171,0.3)',
                           }}
                         />
                         {/* Content */}
@@ -1333,14 +1338,14 @@ export default function CommanderPanel() {
                               borderRadius: '8px',
                               background: affordable
                                 ? `${ability.accent}18`
-                                : 'rgba(255,255,255,0.05)',
-                              border: `1px solid ${affordable ? `${ability.accent}40` : 'rgba(255,255,255,0.08)'}`,
+                                : 'rgba(104,148,171,0.08)',
+                              border: `1px solid ${affordable ? `${ability.accent}40` : 'rgba(104,148,171,0.2)'}`,
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
                               color: affordable
                                 ? ability.accent
-                                : 'rgba(180,200,220,0.35)',
+                                : 'rgba(164,180,194,0.6)',
                               flexShrink: 0,
                               '& svg': { fontSize: 20 },
                             }}
@@ -1356,7 +1361,7 @@ export default function CommanderPanel() {
                                 letterSpacing: '0.05em',
                                 color: affordable
                                   ? '#eef4f6'
-                                  : 'rgba(180,200,220,0.45)',
+                                  : '#7a9ab0',
                                 lineHeight: 1.2,
                                 textTransform: 'uppercase',
                               }}
@@ -1368,7 +1373,7 @@ export default function CommanderPanel() {
                                 fontSize: 11,
                                 color: affordable
                                   ? 'var(--g-muted)'
-                                  : 'rgba(180,200,220,0.3)',
+                                  : '#5a7a8e',
                                 lineHeight: 1.4,
                                 mt: 0.3,
                               }}
@@ -1376,7 +1381,7 @@ export default function CommanderPanel() {
                               {ability.effect}
                             </Typography>
                           </Box>
-                          {/* Cost badge */}
+                          {/* Cost badge — red-tinted when unaffordable so it reads as a blocker */}
                           <Box
                             sx={{
                               flexShrink: 0,
@@ -1387,8 +1392,8 @@ export default function CommanderPanel() {
                               borderRadius: '5px',
                               background: affordable
                                 ? `${ability.accent}15`
-                                : 'rgba(255,255,255,0.04)',
-                              border: `1px solid ${affordable ? `${ability.accent}35` : 'rgba(255,255,255,0.07)'}`,
+                                : 'rgba(229,81,85,0.1)',
+                              border: `1px solid ${affordable ? `${ability.accent}35` : 'rgba(229,81,85,0.35)'}`,
                             }}
                           >
                             <Typography
@@ -1397,7 +1402,7 @@ export default function CommanderPanel() {
                                 fontWeight: 900,
                                 color: affordable
                                   ? ability.accent
-                                  : 'rgba(180,200,220,0.35)',
+                                  : '#e55155',
                                 lineHeight: 1,
                                 fontVariantNumeric: 'tabular-nums',
                               }}
@@ -1411,7 +1416,7 @@ export default function CommanderPanel() {
                                 letterSpacing: '0.1em',
                                 color: affordable
                                   ? `${ability.accent}bb`
-                                  : 'rgba(180,200,220,0.25)',
+                                  : 'rgba(229,81,85,0.7)',
                                 lineHeight: 1,
                                 mt: 0.25,
                                 textTransform: 'uppercase',
