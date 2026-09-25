@@ -6,8 +6,6 @@ import { Server, Socket } from 'socket.io';
 import xss from 'xss';
 import crypto from 'crypto';
 import cors from 'cors';
-import fs from 'fs';
-import path from 'path';
 
 import { ColorArr, MaxTeamNum, ReconnectGraceMs, forceStartOK } from './lib/constants';
 import { roomPool, createRoom } from './lib/room-pool';
@@ -16,6 +14,8 @@ import { resetRoomRuntime, runRoomTick, startRoomOnce } from './lib/room-runtime
 import { eventMetrics } from './lib/observability';
 import { createAdminRouter } from './lib/admin-api';
 import { EliminationReason, matchRecorder, snapshotPlayer } from './lib/match-recorder';
+import { prisma } from './lib/prisma';
+import { createReplayStorageFromEnvironment, createReplayStorageResolver } from './lib/replay-storage';
 import { trackEvent, trackException, trackMetric } from './lib/telemetry';
 import { SESSION_CLAIM_POLICY, SESSION_IP_POLICY, SOCKET_EVENT_POLICIES, SocketRateLimiter } from './lib/socket-rate-limit';
 import { addDummyBotToRoom } from './lib/dummy-bot';
@@ -49,6 +49,7 @@ import {
   claimGameTermination,
   cleanupFinishedRoom,
   getGameOutcome,
+  isRoomAbandoned,
   neutralizePlayer,
   restoreConnectedPlayer,
   scheduleReconnectGrace,
@@ -72,6 +73,9 @@ if (process.env.NODE_ENV === 'production') {
     throw new Error('ADMIN_API_TOKEN must contain at least 32 characters in production.');
   }
 }
+
+const replayStorage = createReplayStorageFromEnvironment(process.env, process.cwd());
+const replayStorageResolver = createReplayStorageResolver(replayStorage, process.env, process.cwd());
 
 const app = express();
 // Trust the first proxy hop so req.ip reflects the real client IP behind
@@ -149,26 +153,20 @@ app.get('/create_sandbox', async (req: Request, res: Response) => {
 });
 
 app.get('/get_replay/:replayId', async (req: Request, res: Response) => {
-  const replayId = req.params.replayId;
-  const replayFilePath = path.join(process.cwd(), 'records', `${replayId}.json`);
-
-  fs.readFile(replayFilePath, 'utf8', (err, data) => {
-    if (err) {
-      console.error(err);
+  try {
+    const replayJson = await replayStorage.readReplay(replayStorage.objectKey(req.params.replayId));
+    if (replayJson === null) {
       res.status(404).json({ error: 'Replay not found' });
-    } else {
-      try {
-        const replayData = JSON.parse(data);
-        res.status(200).json(replayData);
-      } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: 'Failed to parse replay data' });
-      }
+      return;
     }
-  });
+    res.type('application/json').status(200).send(replayJson);
+  } catch (error) {
+    console.error('Failed to read game replay:', error);
+    res.status(404).json({ error: 'Replay not found' });
+  }
 });
 
-app.use('/admin', createAdminRouter(roomPool));
+app.use('/admin', createAdminRouter(roomPool, prisma, replayStorageResolver));
 
 const server = app.listen(process.env.PORT, () => {
   console.log(`Application started on port ${process.env.PORT}!`);
@@ -231,10 +229,8 @@ const gcTimer = setInterval(() => {
   const now = Date.now();
   for (const roomId in roomPool) {
     const room = roomPool[roomId];
-    if (room && room.players.length === 0 && !room.keepAlive) {
-      if (now - room.createdAt > 120_000) {
-        delete roomPool[roomId];
-      }
+    if (room && now - room.createdAt > 120_000) {
+      deleteRoomIfAbandoned(room);
     }
   }
 }, 120_000);
@@ -403,6 +399,16 @@ function currentEliminationPlacement(room: Room): number {
   return room.players.filter((player) => !player.isDead && !player.spectating()).length;
 }
 
+function deleteRoomIfAbandoned(room: Room): boolean {
+  if (roomPool[room.id] !== room || !isRoomAbandoned(room)) return false;
+  // Invalidate any in-flight tick and release every transient timer/map
+  // reference before removing the room from the authoritative pool.
+  resetRoomRuntime(room);
+  cleanupFinishedRoom(room);
+  delete roomPool[room.id];
+  return true;
+}
+
 function finishGame(room: Room, io: Server, gameRecord: GameRecord): boolean {
   const matchId = room.activeMatchId;
   const finalTurn = room.map?.turn || 0;
@@ -431,23 +437,34 @@ function finishGame(room: Room, io: Server, gameRecord: GameRecord): boolean {
   // Emit game_ended immediately (empty replayLink) — do not block on disk I/O.
   io.in(room.id).emit('game_ended', winners, '');
 
-  // P9: Async replay write — does not block the game loop or the event loop.
-  void gameRecord
-    .outPutToJSON(process.cwd())
-    .then((replayLink) => {
-      io.in(room.id).emit('replay_ready', replayLink);
-      if (matchId) matchRecorder.attachReplay(matchId, replayLink);
-    })
-    .catch((error) => {
+  // Generate the existing JSON snapshot before player cleanup mutates the
+  // referenced Player objects. Storage I/O starts later, outside this tick.
+  if (matchId) {
+    try {
+      const replayJson = gameRecord.serialize();
+      void new Promise<void>((resolve) => setImmediate(resolve))
+        .then(() => replayStorage.saveReplay(matchId, replayJson))
+        .then((reference) => {
+          io.in(room.id).emit('replay_ready', reference.replayId);
+          matchRecorder.attachReplay(matchId, reference);
+        })
+        .catch((error) => {
+          eventMetrics.replayWriteFailures += 1;
+          trackMetric('replay_write_failures', 1);
+          trackException(error, { source: 'replay_write', matchId, roomId: room.id });
+          console.error('Failed to write game replay:', error);
+        });
+    } catch (error) {
       eventMetrics.replayWriteFailures += 1;
       trackMetric('replay_write_failures', 1);
-      trackException(error, { source: 'replay_write', matchId, roomId: room.id });
-      console.error('Failed to write game replay:', error);
-    });
+      trackException(error, { source: 'replay_serialization', matchId, roomId: room.id });
+      console.error('Failed to serialize game replay:', error);
+    }
+  }
 
   cleanupFinishedRoom(room);
   io.in(room.id).emit('update_room', room);
-  if (room.players.length === 0 && !room.keepAlive) delete roomPool[room.id];
+  deleteRoomIfAbandoned(room);
   return true;
 }
 
@@ -459,9 +476,7 @@ function removeRoomParticipant(room: Room, player: Player, io: Server): void {
   player.forceStart = false;
   room.players = room.players.filter((candidate) => candidate !== player);
   room.forceStartNum = room.players.filter((candidate) => candidate.forceStart).length;
-  if (room.players.length === 0 && !room.keepAlive) {
-    delete roomPool[room.id];
-  } else {
+  if (!deleteRoomIfAbandoned(room)) {
     if (room.players.length > 0 && !room.players.some((candidate) => candidate.isRoomHost)) {
       room.players[0].setRoomHost(true);
     }

@@ -150,6 +150,44 @@ describe('live Socket.IO event-safety regression', () => {
     }
   });
 
+  it('deletes a tutorial sandbox immediately when the human leaves and only the dummy bot remains', async () => {
+    const port = await openPort();
+    const child = spawn(path.join(serverDir, 'node_modules/.bin/tsx'), ['src/server.ts'], {
+      cwd: serverDir,
+      env: { ...process.env, PORT: String(port), CLIENT_URL: '*', SKIP_CODEFORCES_START_REQUIREMENT: 'true' },
+      stdio: 'pipe',
+    });
+    const sockets: any[] = [];
+    try {
+      await waitForServer(port);
+      const created = await request(port, 'GET', '/create_sandbox');
+      expect(created.status).toBe(200);
+      const roomId = JSON.parse(created.body).roomId as string;
+      const socket = connect(`http://127.0.0.1:${port}`, {
+        autoConnect: false,
+        transports: ['websocket'],
+        query: { roomId, username: 'Tutorial Human' },
+      });
+      sockets.push(socket);
+      const session = once(socket, 'player_session');
+      const roomUpdate = once(socket, 'update_room');
+      socket.connect();
+      await session;
+      const room = await roomUpdate;
+      expect(room.players.some((player: any) => player.id.startsWith('dummy_bot_'))).toBe(true);
+
+      const leave = new Promise<{ ok: boolean }>((resolve) => socket.emit('leave_room', resolve));
+      expect((await leave).ok).toBe(true);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const rooms = JSON.parse((await request(port, 'GET', '/get_rooms')).body);
+      expect(rooms[roomId]).toBeUndefined();
+    } finally {
+      for (const socket of sockets) socket.disconnect();
+      child.kill('SIGTERM');
+    }
+  });
+
   it('starts once, rate-limits floods, rejects duplicates, and restores a disconnected player', async () => {
     const port = await openPort();
     const child: ChildProcessWithoutNullStreams = spawn(path.join(serverDir, 'node_modules/.bin/tsx'), ['src/server.ts'], {

@@ -4,7 +4,7 @@ export const COMMANDER_CONFIG = {
   maxEnergy: 100,
   math: {
     expiresAfterTurns: 360,
-    cooldownTurns: 12,
+    cooldownTurns: 10,
     rewards: {
       EASY: { energy: 3, troops: 1 },
       MEDIUM: { energy: 3, troops: 1 },

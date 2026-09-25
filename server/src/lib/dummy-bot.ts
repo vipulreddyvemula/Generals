@@ -3,6 +3,12 @@ import Player from './player';
 import { ColorArr, MaxTeamNum } from './constants';
 import crypto from 'crypto';
 
+export const DUMMY_BOT_ID_PREFIX = 'dummy_bot_';
+
+export function isDummyBot(player: Pick<Player, 'id'>): boolean {
+  return player.id.startsWith(DUMMY_BOT_ID_PREFIX);
+}
+
 export function addDummyBotToRoom(room: Room): Player | null {
   const allColor = Array.from({ length: ColorArr.length }, (_, i) => i);
   const occupiedColor = room.players.map((player) => player.color);
@@ -23,7 +29,7 @@ export function addDummyBotToRoom(room: Room): Player | null {
     return null; // The room has reached the supported player limit.
   }
 
-  const botId = 'dummy_bot_' + crypto.randomUUID();
+  const botId = DUMMY_BOT_ID_PREFIX + crypto.randomUUID();
   const botSocketId = 'socket_' + botId; // doesn't need an actual socket
 
   const dummyBot = new Player(botId, botSocketId, 'Practice Opponent', playerColor, playerTeam);

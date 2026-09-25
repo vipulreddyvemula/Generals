@@ -5,6 +5,11 @@ import { RoomPool } from './types';
 import { prisma } from './prisma';
 import { RatePolicy, SocketRateLimiter } from './socket-rate-limit';
 import { trackException, trackMetric } from './telemetry';
+import {
+  createReplayStorageFromEnvironment,
+  createReplayStorageResolver,
+  ReplayStorageResolver,
+} from './replay-storage';
 
 const ADMIN_RATE_POLICY: RatePolicy = { burst: 120, refillMs: 60_000 };
 const MAX_PAGE_SIZE = 100;
@@ -76,7 +81,12 @@ function matchDto(match: any) {
     winnerPlayerId: match.winnerPlayerId,
     winnerTeam: match.winnerTeam,
     winner: winner ? { playerId: winner.playerId, playerName: winner.playerName } : null,
-    replay: match.replayId ? { replayId: match.replayId, storage: match.replayStorage } : null,
+    replay: {
+      available: Boolean(match.replayId && match.replayStorageType && match.replayObjectKey),
+      replayId: match.replayId || null,
+      storageType: match.replayStorageType || null,
+      objectKey: match.replayObjectKey || null,
+    },
     players: match.players?.map(matchPlayerDto) || [],
   };
 }
@@ -131,7 +141,15 @@ function buildMatchWhere(query: Request['query']): Prisma.MatchWhereInput {
   return where;
 }
 
-export function createAdminRouter(roomPool: RoomPool, db: PrismaClient = prisma): Router {
+export function createAdminRouter(
+  roomPool: RoomPool,
+  db: PrismaClient = prisma,
+  resolveReplayStorage: ReplayStorageResolver = createReplayStorageResolver(
+    createReplayStorageFromEnvironment(process.env, process.cwd()),
+    process.env,
+    process.cwd()
+  )
+): Router {
   const router = Router();
   const limiter = new SocketRateLimiter();
 
@@ -171,7 +189,7 @@ export function createAdminRouter(roomPool: RoomPool, db: PrismaClient = prisma)
             winnerPlayerId: null,
             winnerTeam: null,
             winner: null,
-            replay: null,
+            replay: { available: false, replayId: null, storageType: null, objectKey: null },
             players: room.players.map((player) => matchPlayerDto({
               playerId: player.id,
               playerName: player.username,
@@ -236,6 +254,27 @@ export function createAdminRouter(roomPool: RoomPool, db: PrismaClient = prisma)
         }),
       ]);
       res.json({ items: matches.map(matchDto), page, pageSize, total, totalPages: Math.ceil(total / pageSize) });
+    })
+  );
+
+  router.get(
+    '/matches/:matchId/replay',
+    asyncRoute(async (req, res) => {
+      const match = await db.match.findUnique({
+        where: { id: req.params.matchId },
+        select: { replayId: true, replayStorageType: true, replayObjectKey: true },
+      });
+      if (!match?.replayId || !match.replayStorageType || !match.replayObjectKey) {
+        res.status(404).json({ error: 'Replay is not available.' });
+        return;
+      }
+      const replayJson = await resolveReplayStorage(match.replayStorageType).readReplay(match.replayObjectKey);
+      if (replayJson === null) {
+        res.status(404).json({ error: 'Replay is not available.' });
+        return;
+      }
+      res.setHeader('Content-Disposition', `inline; filename="${match.replayId}.json"`);
+      res.type('application/json').status(200).send(replayJson);
     })
   );
 

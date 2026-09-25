@@ -7,9 +7,11 @@ import {
   MatchRecorder,
   MatchStore,
   PlayerSnapshot,
+  PrismaMatchStore,
   StartMatchInput,
   snapshotPlayer,
 } from '../src/lib/match-recorder';
+import { ReplayStorageReference } from '../src/lib/replay-storage';
 
 type StoredMatch = {
   id: string;
@@ -22,6 +24,8 @@ type StoredMatch = {
   winnerTeam: number | null;
   finalTurn: number | null;
   replayId: string | null;
+  replayStorageType: string | null;
+  replayObjectKey: string | null;
   players: Map<string, PlayerSnapshot & {
     eliminatedAt: Date | null;
     eliminationReason: string | null;
@@ -56,6 +60,8 @@ class InMemoryMatchStore implements MatchStore {
       winnerTeam: null,
       finalTurn: null,
       replayId: null,
+      replayStorageType: null,
+      replayObjectKey: null,
       players,
       events: [],
     };
@@ -138,8 +144,11 @@ class InMemoryMatchStore implements MatchStore {
     });
   }
 
-  async attachReplay(matchId: string, replayId: string): Promise<void> {
-    this.get(matchId).replayId = replayId;
+  async attachReplay(matchId: string, replay: ReplayStorageReference): Promise<void> {
+    const match = this.get(matchId);
+    match.replayId = replay.replayId;
+    match.replayStorageType = replay.storageType;
+    match.replayObjectKey = replay.objectKey;
   }
 
   protected get(matchId: string): StoredMatch {
@@ -259,5 +268,45 @@ describe('MatchRecorder tournament lifecycle', () => {
 
     expect(store.finishAttempts).toBe(3);
     expect(store.matches.get(matchId)?.status).toBe('COMPLETED');
+  });
+
+  it('persists the replay storage reference on the durable match', async () => {
+    const store = new InMemoryMatchStore();
+    const recorder = new MatchRecorder(store, 1);
+    const { first } = participants();
+    const matchId = recorder.startMatch({ roomId: 'replay-room', players: [snapshotPlayer(first)] });
+    recorder.attachReplay(matchId, {
+      replayId: matchId,
+      storageType: 'AZURE_BLOB',
+      objectKey: `replays/${matchId}.json`,
+    });
+    await recorder.flush(matchId);
+
+    expect(store.matches.get(matchId)).toMatchObject({
+      replayId: matchId,
+      replayStorageType: 'AZURE_BLOB',
+      replayObjectKey: `replays/${matchId}.json`,
+    });
+  });
+
+  it('maps replay metadata to the Prisma Match reference fields', async () => {
+    const updateMany = jest.fn(async () => ({ count: 1 }));
+    const store = new PrismaMatchStore({ match: { updateMany } } as any);
+    const reference: ReplayStorageReference = {
+      replayId: '76fca46d-350e-4d5b-9912-bf0023a7855f',
+      storageType: 'AZURE_BLOB',
+      objectKey: 'replays/76fca46d-350e-4d5b-9912-bf0023a7855f.json',
+    };
+
+    await store.attachReplay('76fca46d-350e-4d5b-9912-bf0023a7855f', reference);
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: reference.replayId },
+      data: {
+        replayId: reference.replayId,
+        replayStorageType: 'AZURE_BLOB',
+        replayObjectKey: reference.objectKey,
+      },
+    });
   });
 });

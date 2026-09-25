@@ -3,6 +3,7 @@ import { MatchEventType, MatchStatus, Prisma, PrismaClient } from '@prisma/clien
 import Player from './player';
 import { prisma } from './prisma';
 import { trackEvent, trackException, trackMetric } from './telemetry';
+import type { ReplayStorageReference } from './replay-storage';
 
 export type EliminationReason =
   | 'GENERAL_CAPTURED'
@@ -60,7 +61,7 @@ export interface MatchStore {
   eliminatePlayer(matchId: string, input: EliminationInput): Promise<void>;
   finishMatch(matchId: string, input: FinishMatchInput): Promise<void>;
   abortMatch(matchId: string, reason: string, finalTurn: number | null, endedAt: Date): Promise<void>;
-  attachReplay(matchId: string, replayId: string, storage: string): Promise<void>;
+  attachReplay(matchId: string, replay: ReplayStorageReference): Promise<void>;
 }
 
 async function createEvent(tx: any, matchId: string, input: MatchEventInput): Promise<void> {
@@ -231,8 +232,15 @@ export class PrismaMatchStore implements MatchStore {
     });
   }
 
-  async attachReplay(matchId: string, replayId: string, storage: string): Promise<void> {
-    await this.db.match.updateMany({ where: { id: matchId }, data: { replayId, replayStorage: storage } });
+  async attachReplay(matchId: string, replay: ReplayStorageReference): Promise<void> {
+    await this.db.match.updateMany({
+      where: { id: matchId },
+      data: {
+        replayId: replay.replayId,
+        replayStorageType: replay.storageType,
+        replayObjectKey: replay.objectKey,
+      },
+    });
   }
 }
 
@@ -332,8 +340,8 @@ export class MatchRecorder {
     trackEvent('match_aborted', { matchId, reason, finalTurn });
   }
 
-  attachReplay(matchId: string, replayId: string, storage = 'LOCAL_FILESYSTEM'): void {
-    this.enqueue(matchId, 'attach_replay', false, () => this.store.attachReplay(matchId, replayId, storage));
+  attachReplay(matchId: string, replay: ReplayStorageReference): void {
+    this.enqueue(matchId, 'attach_replay', false, () => this.store.attachReplay(matchId, replay));
   }
 
   async flush(matchId?: string): Promise<void> {

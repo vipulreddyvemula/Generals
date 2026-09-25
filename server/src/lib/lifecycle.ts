@@ -1,9 +1,21 @@
 import Player from './player';
 import { Room } from './types';
+import { isDummyBot } from './dummy-bot';
 
 export interface GameOutcome {
   terminal: boolean;
   winnerTeam: number | null;
+}
+
+export function hasHumanParticipants(room: Room): boolean {
+  return room.players.some((player) => {
+    if (isDummyBot(player)) return false;
+    return !player.disconnected || player.disconnectGraceExpiresAt !== null;
+  });
+}
+
+export function isRoomAbandoned(room: Room): boolean {
+  return !room.keepAlive && !hasHumanParticipants(room);
 }
 
 export function neutralizePlayer(room: Room, player: Player): boolean {

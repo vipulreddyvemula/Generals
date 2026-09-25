@@ -8,7 +8,7 @@ The four kinds of state deliberately have different owners:
 LIVE GAME STATE             = one game-server process, in memory
 TOURNAMENT/MATCH RECORD     = PostgreSQL through Prisma
 TECHNICAL TELEMETRY         = Azure Monitor / Application Insights
-REPLAY                      = current local JSON files; Azure Blob is future work
+REPLAY                      = local files in development; private Azure Blob Storage in production
 ```
 
 The game loop, `roomPool`, `Room`, `GameMap`, and `Player` remain authoritative for active gameplay. PostgreSQL is not read during movement and is never written on a game tick. `MatchRecorder` records only lifecycle events through an ordered background queue.
@@ -20,7 +20,8 @@ Browser (game and /admin)
 Azure App Service (exactly one game-server instance)
         |-- roomPool / live Room / game tick
         |-- MatchRecorder ---------> Azure Database for PostgreSQL
-        |-- replay JSON -----------> local App Service filesystem (temporary)
+        |-- ReplayStorage ---------> local files (development)
+        |                       `--> private Azure Blob container (production)
         `-- metrics/events --------> Azure Monitor / Application Insights
 ```
 
@@ -29,13 +30,13 @@ The `/admin` page polls protected endpoints every five seconds. It does not join
 ## 2. Database schema
 
 - `Event`: tournament/event name, status, lifecycle timestamps.
-- `Match`: durable UUID distinct from `roomId`, optional event, status, timestamps, authoritative winner player/team, final turn, duration, and replay reference.
+- `Match`: durable UUID distinct from `roomId`, optional event, status, timestamps, authoritative winner player/team, final turn, duration, and replay ID/storage type/object key.
 - `MatchPlayer`: immutable identity snapshot (player ID/name, Codeforces handle, team, color, spectator flag) plus placement, winner, and elimination result.
 - `MatchEvent`: ordered meaningful events with timestamp and JSON payload.
 
 Uniqueness constraints prevent duplicate `(matchId, playerId)`, `(matchId, sequenceNumber)`, and `(matchId, idempotencyKey)` records. Indexed filters cover event, room, status, start time, player ID/handle, event type, sequence, and timestamp.
 
-The migration is `server/prisma/migrations/20260923000000_init_match_tracking/migration.sql`. Obsolete SQLite/custom-map migrations and `dev.db` artifacts were removed, leaving one PostgreSQL-only baseline.
+The PostgreSQL baseline is `server/prisma/migrations/20260923000000_init_match_tracking/migration.sql`. Replay reference fields are migrated by `20260923010000_add_replay_storage_fields/migration.sql`. Obsolete SQLite/custom-map migrations and `dev.db` artifacts remain removed.
 
 ## 3. Match lifecycle
 
@@ -44,7 +45,7 @@ The migration is `server/prisma/migrations/20260923000000_init_match_tracking/mi
 3. After map and replay initialization, the server generates a UUID match ID, snapshots non-spectating players, queues `Match`, `MatchPlayer`, `MATCH_STARTED`, and initial `PLAYER_JOINED` rows, then begins gameplay.
 4. A player joining an already-running room is a spectator and receives a snapshot plus `PLAYER_JOINED` event.
 5. General capture, explicit surrender, AFK surrender, reconnect expiry, and invalid-General safety record the authoritative turn/reason/captor before cleanup can erase live state.
-6. `finishGame` claims termination once, gets the winner from `getGameOutcome`, queues completion, writes the replay asynchronously, and attaches its replay reference when available.
+6. `finishGame` claims termination once, gets the winner from `getGameOutcome`, serializes the unchanged replay payload before player cleanup, then asynchronously stores it through `ReplayStorage` and attaches its durable reference.
 7. `cleanupFinishedRoom` clears both gameplay transients and the active match handle idempotently.
 
 Recorder writes are serialized per match. Database constraints protect against process-path duplicates. Critical start/elimination/completion writes use bounded exponential retries; failures are logged as critical and emitted to telemetry without blocking the game loop.
@@ -70,6 +71,7 @@ All endpoints require `Authorization: Bearer <ADMIN_API_TOKEN>` and share an IP 
 - `GET /admin/matches?page=1&pageSize=25`
 - `GET /admin/matches/live`
 - `GET /admin/matches/:matchId`
+- `GET /admin/matches/:matchId/replay`
 - `GET /admin/matches/:matchId/events?page=1&pageSize=100`
 - `GET /admin/events/:eventId/matches?page=1&pageSize=25`
 - `GET /admin/events?page=1&pageSize=25`
@@ -77,6 +79,8 @@ All endpoints require `Authorization: Bearer <ADMIN_API_TOKEN>` and share an IP 
 - `GET /admin/stats`
 
 Match list filters: `status`, `eventId`, `roomId`, `from`, `to`, `playerName`, and `codeforcesHandle`. Page size is capped at 100. Responses are explicit DTOs: Prisma row IDs and event idempotency keys are not returned.
+
+Replay metadata contains `available`, `replayId`, `storageType`, and `objectKey`. The replay download endpoint is admin-authenticated and streams replay JSON through the backend; it never returns an Azure URL, SAS token, access key, or credential.
 
 ## 6. Admin authentication and dashboard
 
@@ -99,6 +103,8 @@ Server:
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Application Insights connection string |
 | `APPLICATIONINSIGHTS_LIVE_METRICS` | Optional `true`/`false` |
 | `APPLICATIONINSIGHTS_SAMPLING_PERCENTAGE` | Optional `0`-`100`, default `100` |
+| `AZURE_STORAGE_ACCOUNT_NAME` | Production-only storage account name |
+| `AZURE_REPLAY_CONTAINER` | Production-only private replay container name |
 
 Client build:
 
@@ -131,95 +137,54 @@ pnpm run dev
 
 Open `http://localhost:3000/admin`, enter the `ADMIN_API_TOKEN` from `server/.env`, then play and finish a non-sandbox match. Initial players appear as immutable snapshots; the result and timeline appear after the next poll.
 
+Development does not require Azure configuration. When `NODE_ENV` is not `production`, `LocalReplayStorage` writes the existing JSON format to `server/records/<matchId>.json`. Production selects `AzureBlobReplayStorage` and uses the exact object key `replays/<matchId>.json`.
+
 If a disposable local PostgreSQL database was previously initialized from the retired SQLite/custom-map migration history, recreate that local database or its Docker volume before running `prisma migrate deploy`. Do not delete the current migrations directory. Preserve and migrate any real data instead of resetting a non-disposable database.
 
 ## 9. Azure deployment
 
 This phase supports **one game-server instance only**. Do not enable App Service autoscale or more than one worker for the game server. The separate frontend may scale independently.
 
-The following Azure CLI sequence uses two Linux Web Apps, Azure Container Registry, PostgreSQL Flexible Server, and Application Insights. Replace every placeholder and keep passwords/tokens in a secure shell or Key Vault-backed deployment pipeline.
+### Current production deployment
 
-```bash
-az login
+The production environment was provisioned on 2026-09-24 with Azure CLI:
 
-AZ_LOCATION=centralindia
-AZ_RESOURCE_GROUP=generals-prod-rg
-AZ_ACR=generalsprodregistry
-AZ_PLAN=generals-prod-plan
-AZ_SERVER_APP=generals-game-prod
-AZ_CLIENT_APP=generals-web-prod
-AZ_POSTGRES=generals-prod-pg
-AZ_DATABASE=generals
-AZ_PG_ADMIN=generalsadmin
-AZ_INSIGHTS=generals-prod-insights
-IMAGE_TAG=$(git rev-parse --short HEAD)
+| Resource | Name | Region / configuration |
+| --- | --- | --- |
+| Resource group | `generals-prod-rg` | Resource-group metadata in Central India |
+| App Service plan | `generals-prod-plan` | Linux Basic B1, one worker, India South Central |
+| Game server | `generals-game-baa829` | Node 22, Always On, WebSockets enabled |
+| Frontend | `generals-web-baa829` | Node 22, Next.js standalone |
+| PostgreSQL | `generals-pg-baa829` | PostgreSQL 16, Burstable B1ms, 32 GB |
+| Storage account | `generalsbaa829replays` | Standard LRS, HTTPS-only, public Blob access disabled |
+| Replay container | `generals-replays` | Private; game-server managed identity has Blob Data Contributor |
+| Package container | `app-packages` | Private deployment artifacts |
+| Application Insights | `generals-prod-insights` | Workspace-backed in UAE North |
+| Log Analytics | `generals-prod-law` | UAE North |
 
-az group create --name "$AZ_RESOURCE_GROUP" --location "$AZ_LOCATION"
-az acr create --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_ACR" --sku Basic
-az appservice plan create --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_PLAN" --is-linux --sku P1v3
+Production URLs:
 
-az postgres flexible-server create \
-  --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_POSTGRES" --location "$AZ_LOCATION" \
-  --admin-user "$AZ_PG_ADMIN" --admin-password "$AZ_PG_PASSWORD" \
-  --database-name "$AZ_DATABASE" --version 16 --tier GeneralPurpose \
-  --sku-name Standard_D2ds_v5 --storage-size 128 --backup-retention 14 \
-  --public-access 0.0.0.0
+- Frontend: `https://generals-web-baa829.azurewebsites.net`
+- Game server: `https://generals-game-baa829.azurewebsites.net`
+- Admin dashboard: `https://generals-web-baa829.azurewebsites.net/admin`
 
-az monitor app-insights component create \
-  --resource-group "$AZ_RESOURCE_GROUP" --location "$AZ_LOCATION" \
-  --app "$AZ_INSIGHTS" --application-type web
+The Azure for Students subscription blocks ACR Tasks, so this environment does not use ACR. The backend is deployed as a prebuilt flattened ZIP. The frontend runs from the private `generals-client-npm-20260924.zip` package because App Service/Oryx does not preserve pnpm symlink topology reliably.
 
-az acr build --registry "$AZ_ACR" --image "generals-server:$IMAGE_TAG" ./server
-az acr build --registry "$AZ_ACR" --image "generals-client:$IMAGE_TAG" \
-  --build-arg "NEXT_PUBLIC_SERVER_API=https://$AZ_SERVER_APP.azurewebsites.net" ./client
+The frontend package uses a read-only package SAS that expires on **2027-09-24**. Redeploy or renew `WEBSITE_RUN_FROM_PACKAGE` before that date. This package credential is separate from replay access: production replay uploads/downloads continue to use the game server's system-assigned managed identity and `DefaultAzureCredential`.
 
-az webapp create --resource-group "$AZ_RESOURCE_GROUP" --plan "$AZ_PLAN" \
-  --name "$AZ_SERVER_APP" \
-  --deployment-container-image-name "$AZ_ACR.azurecr.io/generals-server:$IMAGE_TAG"
-az webapp create --resource-group "$AZ_RESOURCE_GROUP" --plan "$AZ_PLAN" \
-  --name "$AZ_CLIENT_APP" \
-  --deployment-container-image-name "$AZ_ACR.azurecr.io/generals-client:$IMAGE_TAG"
+Production requirements:
 
-ACR_ID=$(az acr show --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_ACR" --query id -o tsv)
-SERVER_PRINCIPAL=$(az webapp identity assign --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_SERVER_APP" --query principalId -o tsv)
-CLIENT_PRINCIPAL=$(az webapp identity assign --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_CLIENT_APP" --query principalId -o tsv)
-az role assignment create --assignee-object-id "$SERVER_PRINCIPAL" --assignee-principal-type ServicePrincipal --scope "$ACR_ID" --role AcrPull
-az role assignment create --assignee-object-id "$CLIENT_PRINCIPAL" --assignee-principal-type ServicePrincipal --scope "$ACR_ID" --role AcrPull
-az webapp config set --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_SERVER_APP" --generic-configurations '{"acrUseManagedIdentityCreds": true}'
-az webapp config set --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_CLIENT_APP" --generic-configurations '{"acrUseManagedIdentityCreds": true}'
+- create or select an Azure Storage account;
+- create the container named by `AZURE_REPLAY_CONTAINER` with public access disabled;
+- enable a managed identity on the game-server App Service;
+- grant that identity the **Storage Blob Data Contributor** role, scoped as narrowly as practical;
+- configure `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_REPLAY_CONTAINER` as server-side App Service settings;
+- keep account keys, connection strings, SAS tokens, and storage credentials out of the client and repository;
+- retain exactly one realtime game-server instance.
 
-AI_CONNECTION=$(az monitor app-insights component show --resource-group "$AZ_RESOURCE_GROUP" --app "$AZ_INSIGHTS" --query connectionString -o tsv)
-DATABASE_URL="postgresql://$AZ_PG_ADMIN:$AZ_PG_PASSWORD@$AZ_POSTGRES.postgres.database.azure.com:5432/$AZ_DATABASE?sslmode=require&schema=public"
+`AzureBlobReplayStorage` authenticates with `DefaultAzureCredential`. On Azure this resolves the App Service managed identity. The application deliberately does not create the container or change its access policy; the private container is provisioned by infrastructure.
 
-az webapp config appsettings set --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_SERVER_APP" --settings \
-  NODE_ENV=production PORT=3001 WEBSITES_PORT=3001 \
-  CLIENT_URL="https://$AZ_CLIENT_APP.azurewebsites.net" \
-  DATABASE_URL="$DATABASE_URL" ADMIN_API_TOKEN="$ADMIN_API_TOKEN" \
-  APPLICATIONINSIGHTS_CONNECTION_STRING="$AI_CONNECTION" \
-  APPLICATIONINSIGHTS_LIVE_METRICS=true
-
-az webapp config appsettings set --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_CLIENT_APP" --settings \
-  NODE_ENV=production PORT=3000 WEBSITES_PORT=3000
-
-az webapp config set --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_SERVER_APP" \
-  --web-sockets-enabled true --always-on true --number-of-workers 1
-az webapp update --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_SERVER_APP" --https-only true
-az webapp update --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_CLIENT_APP" --https-only true
-
-az webapp restart --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_SERVER_APP"
-az webapp restart --resource-group "$AZ_RESOURCE_GROUP" --name "$AZ_CLIENT_APP"
-```
-
-The server container runs `prisma migrate deploy` before starting Node. For a controlled pre-deployment migration, run this from a trusted CI runner with the Azure `DATABASE_URL`:
-
-```bash
-cd server
-pnpm install --frozen-lockfile
-pnpm prisma generate
-pnpm prisma migrate deploy
-```
-
-If a database password contains URI-reserved characters, percent-encode it before constructing `DATABASE_URL`. Prefer private networking for the final production network design; `--public-access 0.0.0.0` is the shortest Azure-services quickstart configuration, not the strongest isolation.
+Production replay objects use `replays/<matchId>.json`. The container is private, and replay content is retrieved through authenticated backend routes rather than public Blob URLs.
 
 ## 10. Monitoring
 
@@ -235,12 +200,12 @@ Suggested alerts: HTTP 5xx rate, uncaught exceptions, database write failures, r
 
 ## 11. Backup and recovery
 
-Use PostgreSQL Flexible Server automated backups with 14-35 day retention according to event policy, enable zone-redundant high availability for important events, and test point-in-time restore before the tournament. Export final tournament results after an event as an additional logical backup. Database recovery restores match records but not local replay files.
+Use PostgreSQL Flexible Server automated backups according to event policy and test point-in-time restore before the tournament. Export final tournament results after an event as an additional logical backup. Database recovery restores replay references; Blob lifecycle, retention, versioning, and recovery must be configured separately on the storage account.
 
-The current local replay directory is **not durable across App Service instance replacement, rescheduling, or redeployment**. Match records retain the local replay ID/storage type so a later `ReplayStorage` implementation can move files to Azure Blob Storage without changing tournament history.
+Development replay files remain local and disposable. Production replay JSON is durable in the private Blob container, while PostgreSQL stores its storage type and object key.
 
 ## 12. Current limitation and future multi-instance architecture
 
-The authoritative game server must remain at one instance. Multiple instances would have independent `roomPool` maps, intervals, Socket.IO clients, and replay files; merely adding a Socket.IO Redis adapter would not make game authority safe.
+The authoritative game server must remain at one instance. Multiple instances would have independent `roomPool` maps, intervals, and Socket.IO clients; merely adding a Socket.IO Redis adapter would not make game authority safe.
 
-A future multi-instance design requires explicit room ownership/sharding, distributed leases, Socket.IO pub/sub, a durable command/event outbox, recovery snapshots, and Blob replay storage. PostgreSQL should remain the tournament record rather than becoming a 500 ms game-state sink.
+A future multi-instance design requires explicit room ownership/sharding, distributed leases, Socket.IO pub/sub, a durable command/event outbox, and recovery snapshots. Blob replay storage is already instance-independent, but it does not solve realtime room authority. PostgreSQL should remain the tournament record rather than becoming a 500 ms game-state sink.
