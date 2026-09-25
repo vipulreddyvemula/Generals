@@ -1,154 +1,179 @@
-## GenniaServer 2
+# Generals (Gennia)
 
-<h1 align="center">
-  <img src="client/public/img/favicon.png" style="height: 90px;"alt="Gennia">
+<p align="center">
+  <img src="client/public/img/favicon.png" height="90" alt="Gennia icon">
   <br>
-  <img src="client/public/img/gennia-logo.png" style="height: 30px;"alt="Gennia">
-</h1>
+  <img src="client/public/img/gennia-logo.png" height="30" alt="Gennia logo">
+</p>
 
-> [Gennia](https://gennia.online): Yet another generals.io clone server & client
+Generals is a real-time multiplayer strategy game inspired by
+[generals.io](https://generals.io). Capture territory, grow armies, solve
+Commander challenges, and take the opposing General before yours is captured.
 
-> Looking for the latest version? We now recommend [BlockWar (方块战争)](https://github.com/makerjackie/BlockWar), the new official name and latest version of this project. It is a complete rewrite with major improvements, rebuilt with React, Hono.js, and Cloudflare Durable Objects, and designed for modern serverless deployment on Cloudflare.
->
-> 如果你在找这个项目的最新版本，我们现在推荐 [BlockWar（方块战争）](https://github.com/makerjackie/BlockWar)。这是该项目的新名称和最新版本，已经完成全面重构与多项改进，基于 React、Hono.js 和 Cloudflare Durable Objects 重建，并采用 Cloudflare 的现代无服务器部署架构。
+The project includes a Next.js web client, an authoritative Express/Socket.IO
+game server, PostgreSQL match tracking, replays, an admin dashboard, and a
+guided practice sandbox.
 
-<h5 align="center">
-<img src="gennia-pc.png" width="400" >
+## Quick start
 
-Gennia PC demo
+### Prerequisites
 
-<img src="gennia-mobile.png" width="300" >
+- Git
+- [Node.js 22 LTS](https://nodejs.org/)
+- [pnpm](https://pnpm.io/installation) 9 or newer
+- [Docker](https://docs.docker.com/get-docker/) with Docker Compose
+- Bash and Make on macOS/Linux, or WSL/Git Bash on Windows
 
-Gennia Mobile demo
-
-</h5>
-
-What is GenniaServer 2?
-
-- A realtime multiplayer game where the goal is to capture all of the enemy's general without losing your own
-- using react/nextjs/socket/express
-- inspired by [generals.io](https://generals.io), the game mode will be different from generals.io in the future.
-
-## How to Play
-
-Your goal is to capture other generals.
-
-- Plains produce one unit every 25 turns
-- Cities and generals produce one unit every turn
-- You can move twice per turn.
-- When you capture the enemy general, all his territory belongs to you and his army strength is halved and becomes yours.
-
-| function           | keyboard     |
-| ------------------ | ------------ |
-| Move Around        | WSAD         |
-| Move On Mobile     | Touch & Drag |
-| Open Chat          | Enter        |
-| Undo Move          | e            |
-| Clear Queued Moves | q            |
-| Select on general  | g            |
-| Center on home     | h            |
-| Center Map         | c            |
-| Toggle 50%         | z            |
-| Set Zoom to Preset | 1 / 2 / 3    |
-| Zoom in / out      | mouse wheel  |
-| Surrender          | escape       |
-
-## Supported Feature
-
-### Basic
-
-- [x] [Game Bot](https://github.com/GenniaApp/GenniaBot)
-- [x] Replays
-- [x] Mobile Support (Drag to attack)
-- [x] Lobby & Custom Game
-- [x] Room Chat
-- [ ] Team
-
-### Game Modifier
-
-- [x] Fog of War
-- [x] Spectator
-- [x] Warring States (Reveal all King)
-- [ ] Move All Armys
-- [ ] Movable King
-
-## Development
-
-### Interactive tutorial
-
-Click **Interactive Tutorial** on the home page. The server creates a private
-14×14 sandbox with fixed General positions, a passive Practice Opponent,
-visible Generals, a larger starting army, and 1000 training Energy. The guide
-uses pointers for specific controls and pointer-free cards for keyboard lessons.
-
-The guide covers selecting the General, moving, splitting an army, troop growth,
-the leaderboard, chat, Math challenges, Scout, Reinforce, Airstrike, and
-capturing the enemy General. Capturing the practice opponent completes the guide
-without closing the sandbox. The player can dismiss the guide and continue
-experimenting with a full Energy refill.
-
-### client: nextjs
-
-First, run the development server:
+Clone and set up the project:
 
 ```bash
-cd client/
-pnpm install
-pnpm run dev
+git clone https://github.com/vipulreddyvemula/Generals.git
+cd Generals
+make setup
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The setup command creates local environment files, installs both applications,
+starts PostgreSQL, generates the Prisma client, and applies database migrations.
+It does not overwrite an existing `.env` file.
 
-#### database
-
-We use postgresql + prisma
-
-- see `.env.example` to config prisma env correctly
-- if you initialize the repo or add a migration, run `pnpm prisma migrate dev` to apply the database schema
-
-```
-npx prisma migrate dev # migrate
-pnpm dlx prisma studio # open databaseUI
-```
-
-### server: express + socket.io
-
+Start the client and server together:
 
 ```bash
-cd server/
-pnpm install
-pnpm dlx prisma migrate dev
-pnpm run dev
+make dev
 ```
 
-#### docker
+Then open:
 
-- setup postgresql and pyadmin to manage data
+- Game: <http://localhost:3000>
+- Server health: <http://localhost:3001/health>
+- Admin dashboard: <http://localhost:3000/admin>
+- pgAdmin, when started separately with `make db-tools`: <http://localhost:8555>
 
+Stop the apps with `Ctrl+C`. Stop PostgreSQL with `make db-down`.
+
+If you do not have Make or prefer to run each step yourself, follow the
+[manual setup guide](docs/DEVELOPMENT.md#manual-setup).
+
+## What is included
+
+- Real-time multiplayer rooms with configurable maps, speed, teams, fog of war,
+  spectators, and Warring States mode
+- Server-authoritative movement, combat, reconnect sessions, and rate limits
+- Commander Mode with Math and Codeforces challenges
+- Scout, Airstrike, and Reinforce abilities powered by earned Energy
+- Interactive tutorial and a private sandbox for learning the controls
+- Mobile drag controls, keyboard controls, chat, zoom, and surrender flow
+- Match history, event administration, protected admin APIs, and dashboard
+- Local JSON replays in development and private Azure Blob replay storage in
+  production
+- PostgreSQL/Prisma persistence for tournament and match metadata
+
+## How to play
+
+Capture every opposing General without losing your own.
+
+- Generals and cities produce one unit every turn.
+- Owned plains produce one unit every 25 turns.
+- Movement can be queued between adjacent tiles.
+- Capturing a General transfers that player's territory and halves the captured
+  armies.
+
+| Action | Control |
+| --- | --- |
+| Move selection | `W`, `A`, `S`, `D` |
+| Mobile movement | Touch and drag |
+| Open chat | `Enter` |
+| Undo queued move | `E` |
+| Clear queued moves | `Q` |
+| Select General | `G` |
+| Center on home | `H` |
+| Center map | `C` |
+| Toggle half army | `Z` |
+| Use zoom preset | `1`, `2`, `3` |
+| Zoom | Mouse wheel or map controls |
+| Cancel targeting / surrender | `Escape` |
+
+Use **Interactive Tutorial** on the home page for a guided match that covers
+movement, army splitting, troop growth, chat, challenges, abilities, and
+capturing a General.
+
+## Common development commands
+
+Run these from the repository root:
+
+| Command | Purpose |
+| --- | --- |
+| `make setup` | Prepare a fresh clone for local development |
+| `make dev` | Run the client and server together |
+| `make db-up` | Start only PostgreSQL |
+| `make db-tools` | Start PostgreSQL and pgAdmin |
+| `make db-migrate` | Generate Prisma Client and apply migrations |
+| `make test` | Run the server test suite |
+| `make build` | Build the client and server |
+| `make db-down` | Stop local database containers |
+| `make help` | Show all available commands |
+
+Local development uses these defaults:
+
+| Service | Address |
+| --- | --- |
+| Next.js client | `http://localhost:3000` |
+| Express/Socket.IO server | `http://localhost:3001` |
+| PostgreSQL | `localhost:5432` |
+| pgAdmin | `http://localhost:8555` |
+
+Azure credentials are not required for local development. Replays are written
+to `server/records/` locally.
+
+## Repository layout
+
+```text
+Generals/
+├── client/                 # Next.js frontend and admin dashboard
+├── server/                 # Express, Socket.IO, game engine, and Prisma
+│   ├── prisma/             # PostgreSQL schema and migrations
+│   ├── src/lib/commander/  # Math and Codeforces challenge services
+│   └── __tests__/          # Server unit and integration tests
+├── docs/                   # Architecture, development, and operations guides
+├── scripts/                # Local setup and combined development launcher
+└── Makefile                # Shortcuts for common workflows
 ```
-docker-compose up -d
+
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [Local development guide](docs/DEVELOPMENT.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Commander Mode](docs/COMMANDER_STATUS.md)
+- [Implementation status](docs/IMPLEMENTATION_STATUS.md)
+- [Match tracking, admin, replay storage, and Azure operations](docs/MATCH_TRACKING.md)
+- [Session and lifecycle security](server/SECURITY.md)
+- [Event safety and capacity guards](server/EVENT_SAFETY.md)
+
+## Production deployment
+
+Production requires explicit CORS origins, a strong admin token, PostgreSQL,
+and exactly one authoritative game-server instance. The current Azure topology,
+required environment variables, replay-storage design, migration procedure, and
+monitoring guidance are documented in [MATCH_TRACKING.md](docs/MATCH_TRACKING.md).
+
+Do not deploy with the example credentials from `server/.env.example`.
+
+## Contributing
+
+Before opening a pull request, run:
+
+```bash
+make test
+make build
 ```
 
-## Deployment
-
-Tournament match recording, the protected `/admin` dashboard, monitoring, and the single-instance Azure deployment procedure are documented in [docs/MATCH_TRACKING.md](docs/MATCH_TRACKING.md).
-
-- [PM2](https://pm2.keymetrics.io/docs/usage/quick-start/) is a production process manager for Node.js applications, which is very easy to use.
-- docker-compose: for setup database
-
-- see `make deploy` and `make restart` in Makefile
-- to set the application to restart on startup see: https://pm2.keymetrics.io/docs/usage/startup/
-
-## [Roadmap](https://github.com/orgs/GenniaApp/projects/1)
-
-## JoinUs
-
-- QQ Group : 374889821
-- [Discord](https://discord.gg/p9BfpwBF)
+Keep secrets out of the repository and update the relevant documentation when
+changing environment variables, ports, migrations, or public behavior.
 
 ## License
 
-Distributed under the GNU GENERAL PUBLIC LICENSE VERSION 3. See `LICENSE.txt` for more information.
+Distributed under the GNU General Public License v3.0. See [LICENSE](LICENSE).
 
 ## Acknowledgments
 

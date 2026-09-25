@@ -26,13 +26,13 @@ Limits use one in-process token-bucket implementation keyed by current room/play
 | `get_room_info` | 10 / 1 second |
 | `get_commander_config` | 5 / 1 second |
 
-Connection attempts are limited to 600/minute per source IP (large enough for a same-host event test) and 8/minute per source-IP/player-ID reconnect claim. The existing reconnect credential is still required. Codeforces handlers and queue behavior are intentionally unchanged by this phase at the user's direction.
+Connection attempts are limited to 600/minute per source IP (large enough for a same-host event test) and 8/minute per source-IP/player-ID reconnect claim. The existing reconnect credential is still required. Codeforces traffic has its own shared queue, request spacing, caching, backoff, and timeout behavior.
 
 ## Room runtime and diagnostics
 
 A room-local startup guard is acquired before any startup work. Only one force-start transition can initialize a room. A separate room-local tick guard prevents another tick while a previous asynchronous tick is pending; an exception releases the guard. Termination invalidates outstanding tick generations, so a stale continuation cannot mutate a reused room.
 
-`GET /health` and a structured log every 15 seconds report connected sockets, active rooms/matches/players, tick duration, prevented overlaps, event-loop lag, Socket.IO event and approximate transport byte rates, reconnects, exceptions, game ends, process memory, and rooms with no successful tick for 15 seconds. The endpoint contains no session tokens. Codeforces queue internals are not instrumented here because that code was explicitly left untouched.
+`GET /health` and a structured log every 15 seconds report connected sockets, active rooms/matches/players, tick duration, prevented overlaps, event-loop lag, Socket.IO event and approximate transport byte rates, reconnects, exceptions, game ends, process memory, rooms with no successful tick for 15 seconds, and Codeforces queue depth. The endpoint contains no session tokens.
 
 ## Retired Custom Maps
 

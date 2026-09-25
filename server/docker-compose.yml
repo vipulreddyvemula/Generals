@@ -1,24 +1,26 @@
-version: '3'
 services:
   postgres:
     image: postgres:14.1-alpine
-    container_name: postgres
-    hostname: postgres
     ports:
-      - 5432:5432
+      - '5432:5432'
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-postgres}']
+      interval: 2s
+      timeout: 5s
+      retries: 15
     restart: unless-stopped
 
   pgadmin:
     image: dpage/pgadmin4
-    container_name: pgadmin
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     ports:
       - '${PGADMIN_PORT:-8555}:80'
     environment:
@@ -27,18 +29,6 @@ services:
     volumes:
       - pgadmin-data:/var/lib/pgadmin
     restart: unless-stopped
-
-  # todo: fix symlink
-  # gennia-server:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #   container_name: gennia-server
-  #   depends_on:
-  #     - postgres
-  #   ports:
-  #     - '3001:3001'
-  #   restart: always
 
 volumes:
   postgres-data:

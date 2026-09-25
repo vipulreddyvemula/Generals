@@ -1,32 +1,65 @@
-.PHONY: install
-install:
-	cd client && pnpm install
-	cd server && pnpm install
-	pnpm install pm2 -g
+SHELL := /bin/bash
 
-.PHONY: install_in_china
-install_in_china:
-	pnpm config set registry https://registry.npmmirror.com/
-	pnpm config set sharp_binary_host "https://npmmirror.com/mirrors/sharp"
-	pnpm config set sharp_libvips_binary_host "https://npmmirror.com/mirrors/sharp-libvips"
-	pnpm install sharp
+.DEFAULT_GOAL := help
 
-initdb:
-	echo "请在 server/.env 中配置你的 DATABASE_URL"
-	cd server && pnpm dlx prisma migrate dev
+.PHONY: help setup env install dev test build db-up db-tools db-down db-logs db-migrate initdb deploy restart
 
-.PHONY: deploy # change `client/.env.production` & `server/.env` to your own settings, for example, change gennia.online to gennia.cn
-deploy:
+help: ## Show available commands
+	@awk 'BEGIN {FS = ":.*## "; printf "Usage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*## / {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+setup: ## Prepare a fresh clone for local development
+	./scripts/setup.sh
+
+env: ## Create missing local environment files without overwriting existing ones
+	@test -f server/.env || cp server/.env.example server/.env
+	@test -f client/.env.local || cp client/.env.example client/.env.local
+
+install: ## Install client and server dependencies from lockfiles
+	cd client && pnpm install --frozen-lockfile
+	cd server && pnpm install --frozen-lockfile
+
+dev: ## Run the client and server together; Ctrl+C stops both
+	./scripts/dev.sh
+
+test: ## Run the server test suite
+	cd server && pnpm test --runInBand
+
+build: ## Build the server and client
+	cd server && pnpm run build
+	cd client && pnpm run build
+
+db-up: env ## Start PostgreSQL and wait until it is healthy
+	cd server && docker compose up -d --wait postgres
+
+db-tools: env ## Start PostgreSQL and pgAdmin
+	cd server && docker compose up -d --wait postgres pgadmin
+
+db-down: ## Stop local database containers (keeps data volumes)
+	cd server && docker compose down
+
+db-logs: ## Follow PostgreSQL logs
+	cd server && docker compose logs -f postgres
+
+db-migrate: env ## Generate Prisma Client and apply committed migrations
+	cd server && pnpm prisma generate
+	cd server && pnpm prisma migrate deploy
+
+initdb: db-migrate ## Backward-compatible alias for db-migrate
+
+# Legacy PM2 deployment helpers. For the supported Azure topology and required
+# production settings, read docs/MATCH_TRACKING.md before using these targets.
+deploy: ## Build and run both applications with PM2 on a single host
 	cd client && pnpm run build
 	pm2 delete gennia-client 2> /dev/null || true
 	cd client && pm2 start pnpm --time --name "gennia-client" -- start --port 3000
-	cd server && docker-compose up -d # start postgresql
-	cd server && pnpm dlx prisma migrate dev
+	cd server && docker compose up -d --wait postgres
+	cd server && pnpm prisma migrate deploy
+	cd server && pnpm run build
 	pm2 delete gennia-server 2> /dev/null || true
-	cd server && pm2 start pnpm --time --name "gennia-server" -- start --port 3001
+	cd server && pm2 start node --time --name "gennia-server" -- ./dist/src/server.js
 
-.PHONY: restart
-restart: # if you change prisma schema, run `pnpm dlx prisma migrate dev` first
+restart: ## Rebuild and restart existing PM2 processes
 	cd client && pnpm run build
-	pm2 delete gennia-client 2> /dev/null || true && cd client && pm2 start pnpm --time --name "gennia-client" -- start --port 3000
-	pm2 delete gennia-server 2> /dev/null || true && cd server && pm2 start pnpm --time --name "gennia-server" -- start --port 3001
+	cd server && pnpm run build
+	pm2 restart gennia-client
+	pm2 restart gennia-server

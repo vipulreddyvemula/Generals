@@ -1,5 +1,5 @@
 import { addDummyBotToRoom, isDummyBot } from '../src/lib/dummy-bot';
-import { hasHumanParticipants, isRoomAbandoned } from '../src/lib/lifecycle';
+import { cancelReconnectGrace, hasHumanParticipants, isRoomAbandoned, scheduleReconnectGrace } from '../src/lib/lifecycle';
 import Player from '../src/lib/player';
 import { Room } from '../src/lib/types';
 
@@ -24,9 +24,10 @@ describe('tutorial sandbox abandonment', () => {
 
     expect(hasHumanParticipants(room)).toBe(true);
     expect(isRoomAbandoned(room)).toBe(false);
-    human.disconnected = true;
+    scheduleReconnectGrace(human, jest.fn(), 120_000);
     expect(isRoomAbandoned(room)).toBe(false);
 
+    cancelReconnectGrace(human);
     room.players = room.players.filter((player) => player !== human);
     expect(isRoomAbandoned(room)).toBe(true);
   });

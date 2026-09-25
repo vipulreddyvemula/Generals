@@ -105,6 +105,9 @@ Server:
 | `APPLICATIONINSIGHTS_SAMPLING_PERCENTAGE` | Optional `0`-`100`, default `100` |
 | `AZURE_STORAGE_ACCOUNT_NAME` | Production-only storage account name |
 | `AZURE_REPLAY_CONTAINER` | Production-only private replay container name |
+| `MAX_ROOMS` | Optional in-memory room ceiling, default `160` |
+| `MAX_TOTAL_PLAYERS` | Optional total player ceiling, default `300` |
+| `MAX_PLAYERS_PER_ROOM` | Optional per-room ceiling, default/hard maximum `12` |
 
 Client build:
 
@@ -114,30 +117,31 @@ Client build:
 
 ## 8. Local development
 
-Use Node 22 and pnpm. Start PostgreSQL, apply migrations, then start each app:
+The supported fresh-clone workflow is:
 
 ```bash
-cd server
-docker compose up -d postgres
-cp .env.example .env
-pnpm install
-pnpm prisma generate
-pnpm prisma migrate deploy
-pnpm run dev
+git clone https://github.com/vipulreddyvemula/Generals.git
+cd Generals
+make setup
+make dev
 ```
 
-In a second terminal:
+This starts PostgreSQL through Docker Compose and runs the server on port 3001
+and client on port 3000. Azure variables may remain empty: when `NODE_ENV` is
+not `production`, `LocalReplayStorage` writes the existing JSON format to
+`server/records/<matchId>.json`. Production selects `AzureBlobReplayStorage` and
+uses the exact object key `replays/<matchId>.json`.
 
-```bash
-cd client
-cp .env.example .env.local
-pnpm install
-pnpm run dev
-```
+Open the admin dashboard:
 
-Open `http://localhost:3000/admin`, enter the `ADMIN_API_TOKEN` from `server/.env`, then play and finish a non-sandbox match. Initial players appear as immutable snapshots; the result and timeline appear after the next poll.
+- Open `http://localhost:3000/admin`.
+- Enter the `ADMIN_API_TOKEN` from `server/.env`.
+- Play and finish a non-sandbox match.
+- Wait for the next five-second dashboard poll.
 
-Development does not require Azure configuration. When `NODE_ENV` is not `production`, `LocalReplayStorage` writes the existing JSON format to `server/records/<matchId>.json`. Production selects `AzureBlobReplayStorage` and uses the exact object key `replays/<matchId>.json`.
+Initial players appear as immutable snapshots; the result and timeline appear
+after the next poll. Manual setup, environment details, Windows instructions,
+database reset steps, and troubleshooting are in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 If a disposable local PostgreSQL database was previously initialized from the retired SQLite/custom-map migration history, recreate that local database or its Docker volume before running `prisma migrate deploy`. Do not delete the current migrations directory. Preserve and migrate any real data instead of resetting a non-disposable database.
 
